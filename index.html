@@ -17,6 +17,7 @@
         <button class="tab-btn" data-tab="window">窗函数对比</button>
         <button class="tab-btn" data-tab="sampling">采样定理</button>
         <button class="tab-btn" data-tab="filter">频域滤波</button>
+        <button class="tab-btn" data-tab="spectrum-editor">频谱编辑器</button>
         <button class="tab-btn" data-tab="mic">实时麦克风</button>
         <button class="tab-btn" data-tab="levels">教学关卡</button>
       </nav>
@@ -298,6 +299,137 @@
                   <span class="legend-item"><span class="legend-color original"></span> 原始信号</span>
                   <span class="legend-item"><span class="legend-color filtered"></span> 滤波后信号</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="spectrum-editor-tab" class="tab-content">
+        <div class="spectrum-editor-container">
+          <div class="spectrum-editor-controls">
+            <h2>频谱编辑器</h2>
+
+            <div class="control-group">
+              <label>采样点数 N:</label>
+              <select id="se-n">
+                <option value="128">128</option>
+                <option value="256" selected>256</option>
+                <option value="512">512</option>
+                <option value="1024">1024</option>
+              </select>
+            </div>
+
+            <div class="control-group">
+              <label>采样率 (Hz):</label>
+              <select id="se-sample-rate">
+                <option value="1000">1000</option>
+                <option value="2000">2000</option>
+                <option value="4000">4000</option>
+                <option value="8000" selected>8000</option>
+              </select>
+            </div>
+
+            <div class="se-section">
+              <h3>绘制模式</h3>
+              <div class="mode-buttons">
+                <button class="btn btn-preset mode-btn active" data-mode="point">单点</button>
+                <button class="btn btn-preset mode-btn" data-mode="line">线段</button>
+                <button class="btn btn-preset mode-btn" data-mode="rect">矩形</button>
+              </div>
+            </div>
+
+            <div class="se-section">
+              <h3>编辑目标</h3>
+              <div class="mode-buttons">
+                <button class="btn btn-preset target-btn active" data-target="magnitude">幅度谱</button>
+                <button class="btn btn-preset target-btn" data-target="phase">相位谱</button>
+              </div>
+            </div>
+
+            <div class="se-section">
+              <h3>画笔幅值</h3>
+              <div class="control-group">
+                <label>幅度值: <span id="se-brush-value">1.0</span></label>
+                <input type="range" id="se-brush-mag" min="0" max="2" step="0.01" value="1">
+              </div>
+              <div class="control-group">
+                <label>相位值 (rad): <span id="se-brush-phase-value">0.00</span></label>
+                <input type="range" id="se-brush-phase" min="-3.14159" max="3.14159" step="0.01" value="0">
+              </div>
+            </div>
+
+            <div class="se-section">
+              <h3>频谱模板</h3>
+              <div class="control-group">
+                <label>模板类型:</label>
+                <select id="se-template">
+                  <option value="lowpass">理想低通</option>
+                  <option value="bandpass">理想带通</option>
+                  <option value="comb">梳状滤波器</option>
+                  <option value="pink">粉红噪声包络</option>
+                </select>
+              </div>
+              <div class="control-group" id="se-cutoff-group">
+                <label>截止频率 (Hz): <span id="se-cutoff-value">1000</span></label>
+                <input type="range" id="se-cutoff" min="1" max="4000" step="1" value="1000">
+              </div>
+              <div class="control-group" id="se-center-group">
+                <label>中心频率 (Hz): <span id="se-center-value">1000</span></label>
+                <input type="range" id="se-center" min="1" max="4000" step="1" value="1000">
+              </div>
+              <div class="control-group" id="se-bandwidth-group">
+                <label>带宽 (Hz): <span id="se-bandwidth-value">500</span></label>
+                <input type="range" id="se-bandwidth" min="1" max="2000" step="1" value="500">
+              </div>
+              <div class="control-group" id="se-comb-spacing-group">
+                <label>峰间隔 (Hz): <span id="se-comb-spacing-value">500</span></label>
+                <input type="range" id="se-comb-spacing" min="50" max="2000" step="10" value="500">
+              </div>
+              <button id="se-apply-template" class="btn btn-primary" style="width: 100%;">应用模板</button>
+            </div>
+
+            <div class="se-section">
+              <h3>频谱运算</h3>
+              <div class="slot-buttons">
+                <button class="btn btn-secondary" id="se-save-a">保存到槽位A</button>
+                <button class="btn btn-secondary" id="se-save-b">保存到槽位B</button>
+              </div>
+              <div class="slot-status" id="se-slot-status">槽位A: 空 | 槽位B: 空</div>
+              <div class="op-buttons">
+                <button class="btn btn-preset" id="se-op-add">A + B</button>
+                <button class="btn btn-preset" id="se-op-mul">A × B</button>
+                <button class="btn btn-preset" id="se-op-sub">A - B</button>
+              </div>
+            </div>
+
+            <div class="signal-actions">
+              <button id="se-idft" class="btn btn-primary">逆变换</button>
+              <button id="se-verify" class="btn btn-secondary">正变换验证</button>
+              <button id="se-clear" class="btn btn-secondary">清空频谱</button>
+              <button id="se-play" class="btn btn-primary">🔊 循环播放</button>
+              <button id="se-import-signal" class="btn btn-secondary">从信号构造导入</button>
+            </div>
+          </div>
+
+          <div class="spectrum-editor-display">
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>幅度谱 (点击/拖动编辑)</h3>
+                <canvas id="se-magnitude-canvas" width="800" height="250"></canvas>
+              </div>
+            </div>
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>相位谱 (范围 -π ~ +π)</h3>
+                <canvas id="se-phase-canvas" width="800" height="250"></canvas>
+              </div>
+            </div>
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>逆变换时域信号</h3>
+                <canvas id="se-time-canvas" width="800" height="300"></canvas>
+                <div class="se-legend" id="se-verify-legend"></div>
               </div>
             </div>
           </div>

@@ -207,7 +207,8 @@ h3 {
 .sampling-container,
 .filter-container,
 .mic-container,
-.levels-container {
+.levels-container,
+.spectrum-editor-container {
   display: grid;
   grid-template-columns: 380px 1fr;
   gap: 1.5rem;
@@ -221,7 +222,8 @@ h3 {
 .sampling-controls,
 .filter-controls,
 .mic-controls,
-.levels-sidebar {
+.levels-sidebar,
+.spectrum-editor-controls {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -238,7 +240,8 @@ h3 {
 .sampling-display,
 .filter-display,
 .mic-display,
-.levels-content {
+.levels-content,
+.spectrum-editor-display {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -743,4 +746,71 @@ canvas {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.se-section {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.se-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.mode-buttons,
+.slot-buttons,
+.op-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.mode-buttons .mode-btn,
+.mode-buttons .target-btn {
+  flex: 1;
+  min-width: 60px;
+}
+
+.mode-buttons .mode-btn.active,
+.mode-buttons .target-btn.active {
+  background: linear-gradient(135deg, #4fc3f7, #7c4dff);
+  color: white;
+  border-color: transparent;
+}
+
+.slot-status {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #b0b0b0;
+  text-align: center;
+}
+
+.op-buttons .btn {
+  flex: 1;
+  min-width: 60px;
+}
+
+#se-magnitude-canvas,
+#se-phase-canvas {
+  cursor: crosshair;
+}
+
+.se-legend {
+  display: flex;
+}
+
+@media (max-width: 1200px) {
+  .spectrum-editor-container {
+    grid-template-columns: 1fr;
+  }
+
+  .spectrum-editor-controls {
+    max-height: none;
+  }
 }

@@ -6,11 +6,13 @@ import { SamplingTheorem } from './samplingTheorem';
 import { FrequencyFilter } from './frequencyFilter';
 import { RealtimeMic } from './realtimeMic';
 import { LevelsSystem } from './levels';
+import { SpectrumEditor } from './spectrumEditor';
 
 class App {
   private signalBuilder: SignalBuilder | null = null;
   private spectrumAnalysis: SpectrumAnalysis | null = null;
   private frequencyFilter: FrequencyFilter | null = null;
+  private spectrumEditor: SpectrumEditor | null = null;
 
   private initializedTabs: Set<string> = new Set();
 
@@ -85,6 +87,12 @@ class App {
         break;
       case 'levels':
         new LevelsSystem();
+        break;
+      case 'spectrum-editor':
+        this.spectrumEditor = new SpectrumEditor();
+        if (this.signalBuilder) {
+          this.spectrumEditor.setSignalBuilder(this.signalBuilder);
+        }
         break;
     }
 
