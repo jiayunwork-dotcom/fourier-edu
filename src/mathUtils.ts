@@ -492,14 +492,38 @@ export function normalize(signal: number[]): number[] {
 export function findPeaks(values: number[], threshold: number = 0.1): number[] {
   const peaks: number[] = [];
   const maxVal = Math.max(...values);
+  const minPeak = threshold * maxVal;
 
-  for (let i = 1; i < values.length - 1; i++) {
-    if (
-      values[i] > values[i - 1] &&
-      values[i] > values[i + 1] &&
-      values[i] > threshold * maxVal
-    ) {
-      peaks.push(i);
+  let i = 1;
+  while (i < values.length - 1) {
+    if (values[i] > minPeak) {
+      if (values[i] >= values[i - 1] && values[i] >= values[i + 1]) {
+        if (values[i] > values[i - 1] || values[i] > values[i + 1]) {
+          peaks.push(i);
+          i += 2;
+          continue;
+        } else if (values[i] === values[i + 1]) {
+          let j = i + 1;
+          while (j < values.length - 1 && values[j] === values[i]) j++;
+          if (j < values.length && values[i] >= values[j]) {
+            const mid = Math.floor((i + j - 1) / 2);
+            peaks.push(mid);
+          }
+          i = j;
+          continue;
+        }
+      }
+    }
+    i++;
+  }
+
+  for (let pass = 0; pass < peaks.length; pass++) {
+    for (let j = 1; j < peaks.length; j++) {
+      if (values[peaks[j]] > values[peaks[j - 1]]) {
+        const tmp = peaks[j];
+        peaks[j] = peaks[j - 1];
+        peaks[j - 1] = tmp;
+      }
     }
   }
 

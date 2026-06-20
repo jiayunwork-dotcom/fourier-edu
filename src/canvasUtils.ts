@@ -564,10 +564,8 @@ export function drawSpectrumAnnotations(
   const yScale = plotHeight / (yRange[1] - yRange[0]);
 
   ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
 
-  const usedPositions: { x: number; width: number }[] = [];
+  const usedPositions: { x: number; width: number; y: number; height: number }[] = [];
 
   for (let i = 0; i < Math.min(peakFrequencies.length, peakValues.length); i++) {
     const freq = peakFrequencies[i];
@@ -579,31 +577,32 @@ export function drawSpectrumAnnotations(
     const y = height - padding - (value - yRange[0]) * yScale;
 
     const label = `${Math.round(freq)}Hz`;
-    const labelWidth = ctx.measureText(label).width + 8;
-    const labelHeight = 18;
+    const labelWidth = Math.max(ctx.measureText(label).width + 12, 42);
+    const labelHeight = 20;
 
-    let labelY = y - labelHeight - 5;
+    let labelY = y - labelHeight - 8;
+    let labelOnTop = true;
 
-    if (labelY < padding + 5) {
-      labelY = y + 5;
-      ctx.textBaseline = 'top';
-    } else {
-      ctx.textBaseline = 'bottom';
+    if (labelY < padding + 2) {
+      labelY = y + 8;
+      labelOnTop = false;
     }
 
     let labelX = x - labelWidth / 2;
-    if (labelX < padding) {
-      labelX = padding;
+    if (labelX < padding + 2) {
+      labelX = padding + 2;
     }
-    if (labelX + labelWidth > width - padding) {
-      labelX = width - padding - labelWidth;
+    if (labelX + labelWidth > width - padding - 2) {
+      labelX = width - padding - 2 - labelWidth;
     }
 
     let overlap = false;
     for (const pos of usedPositions) {
       if (
-        labelX < pos.x + pos.width &&
-        labelX + labelWidth > pos.x
+        labelX < pos.x + pos.width + 3 &&
+        labelX + labelWidth + 3 > pos.x &&
+        labelY < pos.y + pos.height + 3 &&
+        labelY + labelHeight + 3 > pos.y
       ) {
         overlap = true;
         break;
@@ -612,31 +611,66 @@ export function drawSpectrumAnnotations(
 
     if (overlap && i > 0) continue;
 
-    usedPositions.push({ x: labelX, width: labelWidth });
+    usedPositions.push({ x: labelX, width: labelWidth, y: labelY, height: labelHeight });
 
-    ctx.fillStyle = 'rgba(13, 17, 23, 0.9)';
-    ctx.fillRect(labelX - 2, labelY - 2, labelWidth + 4, labelHeight + 4);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.fillStyle = 'rgba(25, 30, 40, 0.95)';
+    roundRect(ctx, labelX, labelY, labelWidth, labelHeight, 4);
+    ctx.fill();
 
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(labelX - 2, labelY - 2, labelWidth + 4, labelHeight + 4);
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, labelX, labelY, labelWidth, labelHeight, 4);
+    ctx.stroke();
 
     ctx.fillStyle = color;
     ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
 
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x, labelY + (ctx.textBaseline === 'bottom' ? labelHeight : 0));
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    ctx.restore();
 
     ctx.beginPath();
-    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.moveTo(x, y);
+    if (labelOnTop) {
+      ctx.lineTo(x, labelY + labelHeight);
+    } else {
+      ctx.lineTo(x, labelY);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
     ctx.stroke();
   }
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
 }

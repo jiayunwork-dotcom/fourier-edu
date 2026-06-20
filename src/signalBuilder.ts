@@ -10,21 +10,24 @@ const PRESET_SIGNALS: Record<string, PresetSignal> = {
   'am': {
     name: 'AM调幅信号',
     waveforms: [
-      { type: 'sine', amplitude: 1.0, frequency: 200, phase: 0 },
-      { type: 'sine', amplitude: 0.5, frequency: 180, phase: 0 },
-      { type: 'sine', amplitude: 0.5, frequency: 220, phase: 0 }
+      { type: 'cosine', amplitude: 1.0, frequency: 200, phase: 0 },
+      { type: 'cosine', amplitude: 0.5, frequency: 180, phase: 0 },
+      { type: 'cosine', amplitude: 0.5, frequency: 220, phase: 0 }
     ],
-    description: '载波200Hz + 调制包络20Hz，观察时域包络和频域双边带'
+    description: '100%调制 AM信号：载波200Hz，调制20Hz，观察包络和双边带'
   },
   'square-approx': {
     name: '方波近似',
     waveforms: [
-      { type: 'sine', amplitude: 1.27, frequency: 50, phase: 0 },
-      { type: 'sine', amplitude: 0.42, frequency: 150, phase: 0 },
-      { type: 'sine', amplitude: 0.25, frequency: 250, phase: 0 },
-      { type: 'sine', amplitude: 0.18, frequency: 350, phase: 0 }
+      { type: 'sine', amplitude: 1.273, frequency: 50, phase: 0 },
+      { type: 'sine', amplitude: 0.424, frequency: 150, phase: 0 },
+      { type: 'sine', amplitude: 0.255, frequency: 250, phase: 0 },
+      { type: 'sine', amplitude: 0.182, frequency: 350, phase: 0 },
+      { type: 'sine', amplitude: 0.141, frequency: 450, phase: 0 },
+      { type: 'sine', amplitude: 0.116, frequency: 550, phase: 0 },
+      { type: 'sine', amplitude: 0.098, frequency: 650, phase: 0 }
     ],
-    description: '前7次奇次谐波叠加，观察Gibbs过冲现象'
+    description: '前7次奇次谐波(50~650Hz)，振幅按4/(nπ)递减，观察Gibbs过冲'
   },
   'dtmf': {
     name: '双音DTMF',
