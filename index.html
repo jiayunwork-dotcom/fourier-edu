@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>傅里叶变换与频谱分析教学工具</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <h1>傅里叶变换与频谱分析交互式教学工具</h1>
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="signal">信号构造</button>
+        <button class="tab-btn" data-tab="series">傅里叶级数</button>
+        <button class="tab-btn" data-tab="dft">DFT频谱分析</button>
+        <button class="tab-btn" data-tab="window">窗函数对比</button>
+        <button class="tab-btn" data-tab="sampling">采样定理</button>
+        <button class="tab-btn" data-tab="filter">频域滤波</button>
+        <button class="tab-btn" data-tab="mic">实时麦克风</button>
+        <button class="tab-btn" data-tab="levels">教学关卡</button>
+      </nav>
+    </header>
+
+    <main class="main-content">
+      <section id="signal-tab" class="tab-content active">
+        <div class="signal-builder">
+          <div class="signal-controls">
+            <h2>信号构造面板</h2>
+            <div class="waveform-list" id="waveform-list"></div>
+            <div class="signal-actions">
+              <button id="add-waveform" class="btn btn-primary">+ 添加波形</button>
+              <button id="clear-waveforms" class="btn btn-secondary">清空所有</button>
+              <button id="toggle-draw" class="btn btn-secondary">手绘模式</button>
+              <button id="clear-drawing" class="btn btn-secondary">清除手绘</button>
+            </div>
+            <div class="draw-canvas-container" id="draw-container" style="display: none;">
+              <canvas id="draw-canvas" width="400" height="200"></canvas>
+              <p class="hint">在上方画布上拖动鼠标绘制波形</p>
+            </div>
+          </div>
+          <div class="signal-display">
+            <h2>时域波形</h2>
+            <canvas id="time-domain-canvas" width="800" height="400"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="series-tab" class="tab-content">
+        <div class="series-container">
+          <div class="series-controls">
+            <h2>傅里叶级数展开</h2>
+            <div class="control-group">
+              <label>选择信号类型:</label>
+              <select id="series-signal-type">
+                <option value="square">方波</option>
+                <option value="triangle">三角波</option>
+                <option value="sawtooth">锯齿波</option>
+                <option value="rect">矩形脉冲</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>谐波次数: <span id="harmonic-count">1</span></label>
+              <input type="range" id="harmonic-slider" min="1" max="50" value="1">
+            </div>
+            <div class="control-group">
+              <label>动画速度:</label>
+              <input type="range" id="animation-speed" min="1" max="10" value="5">
+            </div>
+            <div class="series-actions">
+              <button id="start-series" class="btn btn-primary">级数展开</button>
+              <button id="pause-series" class="btn btn-secondary">暂停</button>
+              <button id="reset-series" class="btn btn-secondary">重置</button>
+            </div>
+            <div class="harmonic-bars">
+              <h3>谐波系数</h3>
+              <canvas id="harmonic-bars-canvas" width="400" height="300"></canvas>
+            </div>
+          </div>
+          <div class="series-display">
+            <h2>级数逼近过程</h2>
+            <canvas id="series-canvas" width="800" height="500"></canvas>
+            <p class="gibbs-note" id="gibbs-note" style="display: none;">
+              ⚠️ Gibbs现象：在不连续点附近出现约9%的过冲，增加谐波次数无法消除
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="dft-tab" class="tab-content">
+        <div class="dft-container">
+          <div class="dft-controls">
+            <h2>DFT参数设置</h2>
+            <div class="control-group">
+              <label>采样点数 N:</label>
+              <select id="dft-n">
+                <option value="64">64</option>
+                <option value="128">128</option>
+                <option value="256" selected>256</option>
+                <option value="512">512</option>
+                <option value="1024">1024</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>采样率 (Hz): <span id="sample-rate-value">1000</span></label>
+              <input type="range" id="sample-rate" min="100" max="10000" value="1000" step="100">
+            </div>
+            <div class="control-group">
+              <label>零填充倍数:</label>
+              <select id="zero-padding">
+                <option value="1" selected>1x (无)</option>
+                <option value="2">2x</option>
+                <option value="4">4x</option>
+                <option value="8">8x</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>窗函数:</label>
+              <select id="dft-window">
+                <option value="rect">矩形窗</option>
+                <option value="hanning">Hanning窗</option>
+                <option value="hamming">Hamming窗</option>
+                <option value="blackman">Blackman窗</option>
+                <option value="kaiser">Kaiser窗</option>
+              </select>
+            </div>
+            <div class="control-group" id="kaiser-beta-group" style="display: none;">
+              <label>Kaiser beta: <span id="kaiser-beta-value">5.0</span></label>
+              <input type="range" id="kaiser-beta" min="0" max="20" value="5" step="0.1">
+            </div>
+          </div>
+          <div class="dft-display">
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>幅度谱</h3>
+                <canvas id="magnitude-spectrum" width="750" height="200"></canvas>
+              </div>
+            </div>
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>相位谱</h3>
+                <canvas id="phase-spectrum" width="750" height="200"></canvas>
+              </div>
+            </div>
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>功率谱 (dB)</h3>
+                <canvas id="power-spectrum" width="750" height="200"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="window-tab" class="tab-content">
+        <div class="window-container">
+          <div class="window-controls">
+            <h2>窗函数对比</h2>
+            <div class="window-selector">
+              <label><input type="checkbox" class="window-checkbox" value="rect" checked> 矩形窗</label>
+              <label><input type="checkbox" class="window-checkbox" value="hanning" checked> Hanning窗</label>
+              <label><input type="checkbox" class="window-checkbox" value="hamming" checked> Hamming窗</label>
+              <label><input type="checkbox" class="window-checkbox" value="blackman" checked> Blackman窗</label>
+              <label><input type="checkbox" class="window-checkbox" value="kaiser"> Kaiser窗 (β=5)</label>
+            </div>
+            <div class="control-group">
+              <label>Kaiser beta: <span id="window-kaiser-beta-value">5.0</span></label>
+              <input type="range" id="window-kaiser-beta" min="0" max="20" value="5" step="0.1">
+            </div>
+            <div class="window-comparison">
+              <h3>窗函数参数对比</h3>
+              <table class="window-table">
+                <thead>
+                  <tr>
+                    <th>窗函数</th>
+                    <th>主瓣宽度 (bin)</th>
+                    <th>最高旁瓣衰减 (dB)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>矩形窗</td><td>2</td><td>-13.3</td></tr>
+                  <tr><td>Hanning窗</td><td>4</td><td>-31.5</td></tr>
+                  <tr><td>Hamming窗</td><td>4</td><td>-42.7</td></tr>
+                  <tr><td>Blackman窗</td><td>6</td><td>-58.1</td></tr>
+                  <tr><td>Kaiser窗 (β=5)</td><td>4</td><td>-44.0</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="window-display">
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>时域窗函数</h3>
+                <canvas id="window-time-domain" width="750" height="250"></canvas>
+              </div>
+            </div>
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>频域响应对比 (dB)</h3>
+                <canvas id="window-frequency-domain" width="750" height="350"></canvas>
+                <div class="legend" id="window-legend"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="sampling-tab" class="tab-content">
+        <div class="sampling-container">
+          <div class="sampling-controls">
+            <h2>Nyquist采样定理演示</h2>
+            <div class="control-group">
+              <label>信号频率 (Hz): <span id="signal-freq-value">50</span></label>
+              <input type="range" id="signal-freq" min="1" max="200" value="50">
+            </div>
+            <div class="control-group">
+              <label>采样率 (Hz): <span id="sampling-rate-value">200</span></label>
+              <input type="range" id="sampling-rate" min="10" max="500" value="200">
+            </div>
+            <div class="control-group">
+              <label>信号相位: <span id="signal-phase-value">0</span>°</label>
+              <input type="range" id="signal-phase" min="0" max="360" value="0">
+            </div>
+            <div class="nyquist-info">
+              <p>Nyquist频率: <strong><span id="nyquist-freq">100</span> Hz</strong></p>
+              <p>2 × 信号频率: <strong><span id="nyquist-min">100</span> Hz</strong></p>
+              <p id="aliasing-status" class="status-ok">✓ 无混叠</p>
+            </div>
+          </div>
+          <div class="sampling-display">
+            <h2>采样与重建</h2>
+            <canvas id="sampling-canvas" width="800" height="500"></canvas>
+            <div class="sampling-legend">
+              <span class="legend-item"><span class="legend-color original"></span> 原始连续信号</span>
+              <span class="legend-item"><span class="legend-color samples"></span> 采样点</span>
+              <span class="legend-item"><span class="legend-color reconstructed"></span> 重建信号</span>
+              <span class="legend-item aliased" id="aliased-legend" style="display: none;"><span class="legend-color aliased"></span> 混叠信号</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="filter-tab" class="tab-content">
+        <div class="filter-container">
+          <div class="filter-controls">
+            <h2>频域滤波</h2>
+            <div class="control-group">
+              <label>滤波类型:</label>
+              <select id="filter-type">
+                <option value="lowpass">低通滤波</option>
+                <option value="highpass">高通滤波</option>
+                <option value="bandpass">带通滤波</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>截止频率1 (Hz): <span id="cutoff1-value">50</span></label>
+              <input type="range" id="cutoff1" min="1" max="500" value="50">
+            </div>
+            <div class="control-group" id="cutoff2-group" style="display: none;">
+              <label>截止频率2 (Hz): <span id="cutoff2-value">150</span></label>
+              <input type="range" id="cutoff2" min="1" max="500" value="150">
+            </div>
+            <div class="filter-actions">
+              <button id="apply-filter" class="btn btn-primary">应用滤波</button>
+              <button id="reset-filter" class="btn btn-secondary">重置</button>
+              <button id="enable-selection" class="btn btn-secondary">框选频率范围</button>
+            </div>
+            <p class="hint">在幅度谱上拖动鼠标框选要保留的频率范围</p>
+          </div>
+          <div class="filter-display">
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>幅度谱 (可框选)</h3>
+                <canvas id="filter-spectrum" width="750" height="250"></canvas>
+              </div>
+            </div>
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>时域对比</h3>
+                <canvas id="filter-time-domain" width="750" height="300"></canvas>
+                <div class="filter-legend">
+                  <span class="legend-item"><span class="legend-color original"></span> 原始信号</span>
+                  <span class="legend-item"><span class="legend-color filtered"></span> 滤波后信号</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="mic-tab" class="tab-content">
+        <div class="mic-container">
+          <div class="mic-controls">
+            <h2>实时频谱分析</h2>
+            <div class="control-group">
+              <label>FFT大小:</label>
+              <select id="mic-fft-size">
+                <option value="256">256</option>
+                <option value="512">512</option>
+                <option value="1024" selected>1024</option>
+                <option value="2048">2048</option>
+                <option value="4096">4096</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>平滑系数: <span id="mic-smoothing-value">0.8</span></label>
+              <input type="range" id="mic-smoothing" min="0" max="0.95" value="0.8" step="0.05">
+            </div>
+            <div class="mic-actions">
+              <button id="start-mic" class="btn btn-primary">🎤 开始实时频谱</button>
+              <button id="stop-mic" class="btn btn-secondary" disabled>停止</button>
+            </div>
+            <div class="mic-status">
+              <p id="mic-status-text">点击上方按钮开始采集音频</p>
+              <p>FPS: <span id="mic-fps">0</span></p>
+            </div>
+          </div>
+          <div class="mic-display">
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>时域波形 (示波器)</h3>
+                <canvas id="mic-time-domain" width="750" height="250"></canvas>
+              </div>
+            </div>
+            <div class="spectrum-row">
+              <div class="spectrum-item">
+                <h3>频域频谱</h3>
+                <canvas id="mic-frequency-domain" width="750" height="350"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="levels-tab" class="tab-content">
+        <div class="levels-container">
+          <div class="levels-sidebar">
+            <h2>教学关卡</h2>
+            <div class="levels-list" id="levels-list"></div>
+          </div>
+          <div class="levels-content">
+            <div id="level-detail" class="level-detail">
+              <h2 id="level-title">选择一个关卡开始</h2>
+              <div class="level-description" id="level-description">
+                <p>从左侧选择一个关卡，按顺序完成学习任务。</p>
+              </div>
+              <div class="level-objectives" id="level-objectives"></div>
+              <div class="level-task-area" id="level-task-area">
+                <canvas id="level-canvas" width="700" height="300"></canvas>
+              </div>
+              <div class="level-actions">
+                <button id="level-check" class="btn btn-primary" disabled>验证答案</button>
+                <button id="level-hint" class="btn btn-secondary">提示</button>
+                <button id="level-next" class="btn btn-primary" disabled>下一关</button>
+              </div>
+              <div class="level-feedback" id="level-feedback"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
