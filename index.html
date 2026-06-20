@@ -27,6 +27,16 @@
         <div class="signal-builder">
           <div class="signal-controls">
             <h2>信号构造面板</h2>
+            <div class="preset-signals">
+              <h3>预设信号库</h3>
+              <div class="preset-buttons">
+                <button class="btn btn-preset" data-preset="am">AM调幅信号</button>
+                <button class="btn btn-preset" data-preset="square-approx">方波近似</button>
+                <button class="btn btn-preset" data-preset="dtmf">双音DTMF</button>
+                <button class="btn btn-preset" data-preset="chirp">啁啾信号</button>
+                <button class="btn btn-preset" data-preset="noise-sine">白噪声+正弦</button>
+              </div>
+            </div>
             <div class="waveform-list" id="waveform-list"></div>
             <div class="signal-actions">
               <button id="add-waveform" class="btn btn-primary">+ 添加波形</button>
@@ -127,6 +137,12 @@
             <div class="control-group" id="kaiser-beta-group" style="display: none;">
               <label>Kaiser beta: <span id="kaiser-beta-value">5.0</span></label>
               <input type="range" id="kaiser-beta" min="0" max="20" value="5" step="0.1">
+            </div>
+            <div class="control-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="spectrum-annotations" checked>
+                频谱标注（峰值频率）
+              </label>
             </div>
           </div>
           <div class="dft-display">

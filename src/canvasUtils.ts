@@ -544,3 +544,99 @@ export function drawLegend(
     currentY += lineHeight;
   }
 }
+
+export function drawSpectrumAnnotations(
+  ctx: CanvasRenderingContext2D,
+  peakFrequencies: number[],
+  peakValues: number[],
+  width: number,
+  height: number,
+  xRange: [number, number],
+  yRange: [number, number],
+  padding: number = 50,
+  color: string = '#ffa726'
+): void {
+  if (peakFrequencies.length === 0 || peakValues.length === 0) return;
+
+  const plotWidth = width - 2 * padding;
+  const plotHeight = height - 2 * padding;
+  const xScale = plotWidth / (xRange[1] - xRange[0]);
+  const yScale = plotHeight / (yRange[1] - yRange[0]);
+
+  ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+
+  const usedPositions: { x: number; width: number }[] = [];
+
+  for (let i = 0; i < Math.min(peakFrequencies.length, peakValues.length); i++) {
+    const freq = peakFrequencies[i];
+    const value = peakValues[i];
+
+    if (freq < xRange[0] || freq > xRange[1]) continue;
+
+    const x = padding + (freq - xRange[0]) * xScale;
+    const y = height - padding - (value - yRange[0]) * yScale;
+
+    const label = `${Math.round(freq)}Hz`;
+    const labelWidth = ctx.measureText(label).width + 8;
+    const labelHeight = 18;
+
+    let labelY = y - labelHeight - 5;
+
+    if (labelY < padding + 5) {
+      labelY = y + 5;
+      ctx.textBaseline = 'top';
+    } else {
+      ctx.textBaseline = 'bottom';
+    }
+
+    let labelX = x - labelWidth / 2;
+    if (labelX < padding) {
+      labelX = padding;
+    }
+    if (labelX + labelWidth > width - padding) {
+      labelX = width - padding - labelWidth;
+    }
+
+    let overlap = false;
+    for (const pos of usedPositions) {
+      if (
+        labelX < pos.x + pos.width &&
+        labelX + labelWidth > pos.x
+      ) {
+        overlap = true;
+        break;
+      }
+    }
+
+    if (overlap && i > 0) continue;
+
+    usedPositions.push({ x: labelX, width: labelWidth });
+
+    ctx.fillStyle = 'rgba(13, 17, 23, 0.9)';
+    ctx.fillRect(labelX - 2, labelY - 2, labelWidth + 4, labelHeight + 4);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(labelX - 2, labelY - 2, labelWidth + 4, labelHeight + 4);
+
+    ctx.fillStyle = color;
+    ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, labelY + (ctx.textBaseline === 'bottom' ? labelHeight : 0));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}

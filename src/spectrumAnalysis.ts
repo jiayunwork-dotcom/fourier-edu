@@ -1,10 +1,11 @@
-import { computeSpectrum, powerToDB, generateWindow } from './mathUtils';
+import { computeSpectrum, powerToDB, generateWindow, findPeaks } from './mathUtils';
 import {
   clearCanvas,
   drawGrid,
   drawAxes,
   drawStemPlotWithX,
   autoScaleYWithZero,
+  drawSpectrumAnnotations,
 } from './canvasUtils';
 
 export interface SpectrumSettings {
@@ -13,6 +14,7 @@ export interface SpectrumSettings {
   zeroPadding: number;
   windowType: string;
   kaiserBeta: number;
+  showAnnotations: boolean;
 }
 
 export class SpectrumAnalysis {
@@ -28,6 +30,7 @@ export class SpectrumAnalysis {
     zeroPadding: 1,
     windowType: 'rect',
     kaiserBeta: 5,
+    showAnnotations: true,
   };
   private currentSignal: number[] = [];
 
@@ -71,6 +74,14 @@ export class SpectrumAnalysis {
       document.getElementById('kaiser-beta-value')!.textContent = this.settings.kaiserBeta.toFixed(1);
       this.update();
     });
+
+    const annotationCheckbox = document.getElementById('spectrum-annotations') as HTMLInputElement;
+    if (annotationCheckbox) {
+      annotationCheckbox.addEventListener('change', (e) => {
+        this.settings.showAnnotations = (e.target as HTMLInputElement).checked;
+        this.update();
+      });
+    }
   }
 
   public setSignal(signal: number[]): void {
@@ -142,6 +153,38 @@ export class SpectrumAnalysis {
       3,
       padding
     );
+
+    if (this.settings.showAnnotations) {
+      const peakIndices = findPeaks(displayMags, 0.1);
+      const peakFreqs: number[] = [];
+      const peakVals: number[] = [];
+
+      for (const idx of peakIndices) {
+        if (idx < displayFreqs.length) {
+          peakFreqs.push(displayFreqs[idx]);
+          peakVals.push(displayMags[idx]);
+        }
+      }
+
+      const sortedPeaks = peakFreqs.map((freq, i) => ({ freq, val: peakVals[i] }))
+        .sort((a, b) => b.val - a.val)
+        .slice(0, 8);
+
+      const sortedPeakFreqs = sortedPeaks.map(p => p.freq);
+      const sortedPeakVals = sortedPeaks.map(p => p.val);
+
+      drawSpectrumAnnotations(
+        this.magCtx,
+        sortedPeakFreqs,
+        sortedPeakVals,
+        width,
+        height,
+        xRange,
+        yRange,
+        padding,
+        '#ffa726'
+      );
+    }
   }
 
   private renderPhase(frequencies: number[], phase: number[]): void {

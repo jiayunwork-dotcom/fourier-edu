@@ -4,10 +4,14 @@ export interface Complex {
 }
 
 export interface WaveformComponent {
-  type: 'sine' | 'cosine' | 'square' | 'triangle' | 'sawtooth';
+  type: 'sine' | 'cosine' | 'square' | 'triangle' | 'sawtooth' | 'chirp' | 'noise' | 'noise-sine';
   amplitude: number;
   frequency: number;
   phase: number;
+  chirpStartFreq?: number;
+  chirpEndFreq?: number;
+  noiseLevel?: number;
+  signalFrequency?: number;
 }
 
 export interface DFTResult {
@@ -44,12 +48,59 @@ export function generateWaveform(
   }
 }
 
+export function generateChirpSignal(
+  t: number,
+  duration: number,
+  startFreq: number,
+  endFreq: number,
+  amplitude: number = 1
+): number {
+  const k = (endFreq - startFreq) / duration;
+  const phase = 2 * Math.PI * (startFreq * t + 0.5 * k * t * t);
+  return amplitude * Math.sin(phase);
+}
+
+export function generateWhiteNoise(amplitude: number = 1): number {
+  return amplitude * (2 * Math.random() - 1);
+}
+
+export function generateNoiseSineSignal(
+  t: number,
+  signalFreq: number,
+  signalAmp: number,
+  noiseAmp: number
+): number {
+  const signal = signalAmp * Math.sin(2 * Math.PI * signalFreq * t);
+  const noise = noiseAmp * (2 * Math.random() - 1);
+  return signal + noise;
+}
+
 export function generateCompositeSignal(
   components: WaveformComponent[],
-  t: number
+  t: number,
+  duration: number = 0.1
 ): number {
   return components.reduce((sum, comp) => {
-    return sum + generateWaveform(comp.type, comp.amplitude, comp.frequency, comp.phase, t);
+    if (comp.type === 'chirp') {
+      return sum + generateChirpSignal(
+        t,
+        duration,
+        comp.chirpStartFreq || 20,
+        comp.chirpEndFreq || 200,
+        comp.amplitude
+      );
+    } else if (comp.type === 'noise') {
+      return sum + generateWhiteNoise(comp.amplitude);
+    } else if (comp.type === 'noise-sine') {
+      return sum + generateNoiseSineSignal(
+        t,
+        comp.signalFrequency || 50,
+        comp.amplitude,
+        comp.noiseLevel || 0.3
+      );
+    } else {
+      return sum + generateWaveform(comp.type, comp.amplitude, comp.frequency, comp.phase, t);
+    }
   }, 0);
 }
 
@@ -60,9 +111,10 @@ export function generateTimeSeries(
   startTime: number = 0
 ): number[] {
   const dt = 1 / sampleRate;
+  const duration = numSamples / sampleRate;
   const result: number[] = [];
   for (let i = 0; i < numSamples; i++) {
-    result.push(generateCompositeSignal(components, startTime + i * dt));
+    result.push(generateCompositeSignal(components, startTime + i * dt, duration));
   }
   return result;
 }
