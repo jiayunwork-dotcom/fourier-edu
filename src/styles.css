@@ -868,3 +868,206 @@ canvas {
     max-height: none;
   }
 }
+
+.stft-container {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 1.5rem;
+  height: 100%;
+}
+
+.stft-controls,
+.stft-display {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.stft-controls {
+  height: fit-content;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+}
+
+.stft-section {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stft-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.stft-section textarea {
+  width: 100%;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  resize: vertical;
+}
+
+.resolution-display {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.resolution-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0;
+}
+
+.resolution-label {
+  font-size: 0.85rem;
+  color: #b0b0b0;
+}
+
+.resolution-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4fc3f7;
+}
+
+.uncertainty-container {
+  text-align: center;
+}
+
+#stft-uncertainty-canvas {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+}
+
+.stft-hints {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.stft-hints li {
+  padding: 0.4rem 0;
+  font-size: 0.85rem;
+  color: #b0b0b0;
+}
+
+.stft-info-bar {
+  background: rgba(79, 195, 247, 0.1);
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #4fc3f7;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+}
+
+.waveform-thumbnail-container {
+  margin-bottom: 0.5rem;
+}
+
+#stft-waveform-canvas {
+  width: 100%;
+  background: #0d1117;
+  border-radius: 6px;
+}
+
+.spectrogram-container {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  position: relative;
+}
+
+#stft-spectrogram-canvas {
+  flex: 1;
+  background: #0d1117;
+  border-radius: 6px;
+  cursor: crosshair;
+}
+
+#stft-colorbar-canvas {
+  width: 30px;
+  background: #0d1117;
+  border-radius: 4px;
+}
+
+.stft-side-panel {
+  position: fixed;
+  right: 2rem;
+  top: 180px;
+  width: 320px;
+  background: rgba(13, 17, 23, 0.98);
+  border: 1px solid rgba(124, 77, 255, 0.5);
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  display: none;
+}
+
+.stft-side-panel.active {
+  display: block;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+#stft-frame-spectrum-canvas {
+  width: 100%;
+  background: #0d1117;
+  border-radius: 6px;
+}
+
+.stft-selection-info {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: rgba(124, 77, 255, 0.1);
+  border: 1px solid rgba(124, 77, 255, 0.3);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #b388ff;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+}
+
+.stft-selection-info span {
+  color: #7c4dff;
+  font-weight: 600;
+}
+
+@media (max-width: 1200px) {
+  .stft-container {
+    grid-template-columns: 1fr;
+  }
+
+  .stft-controls {
+    max-height: none;
+  }
+
+  .stft-side-panel {
+    position: static;
+    width: 100%;
+    margin-top: 1rem;
+  }
+}

@@ -620,3 +620,63 @@ export function cubicSplineInterpolation(
     );
   });
 }
+
+export function viridisColor(value: number): string {
+  value = Math.max(0, Math.min(1, value));
+
+  const r = Math.floor(255 * (0.2777 + 0.1050 * value - 33.1303 * value * value + 128.5380 * value * value * value - 148.5050 * Math.pow(value, 4) + 60.8096 * Math.pow(value, 5)));
+  const g = Math.floor(255 * (0.0054 + 10.5380 * value - 72.5950 * value * value + 179.6660 * value * value * value - 165.5690 * Math.pow(value, 4) + 58.2535 * Math.pow(value, 5)));
+  const b = Math.floor(255 * (0.3340 + 36.3829 * value - 186.7900 * value * value + 355.1040 * value * value * value - 273.3620 * Math.pow(value, 4) + 85.2221 * Math.pow(value, 5)));
+
+  return `rgb(${Math.max(0, Math.min(255, r))}, ${Math.max(0, Math.min(255, g))}, ${Math.max(0, Math.min(255, b))})`;
+}
+
+export function computeSTFT(
+  signal: number[],
+  frameLength: number,
+  hopSize: number,
+  window: number[],
+  sampleRate: number
+): {
+  magnitudeSpectrogram: number[][];
+  phaseSpectrogram: number[][];
+  timeFrames: number[];
+  frequencyBins: number[];
+} {
+  const numFrames = Math.floor((signal.length - frameLength) / hopSize) + 1;
+  const numFreqBins = Math.floor(frameLength / 2) + 1;
+
+  const magnitudeSpectrogram: number[][] = [];
+  const phaseSpectrogram: number[][] = [];
+  const timeFrames: number[] = [];
+  const frequencyBins: number[] = [];
+
+  for (let k = 0; k < numFreqBins; k++) {
+    frequencyBins.push((k * sampleRate) / frameLength);
+  }
+
+  for (let i = 0; i < numFrames; i++) {
+    const startIdx = i * hopSize;
+    const frame = signal.slice(startIdx, startIdx + frameLength);
+
+    const windowedFrame = frame.map((val, j) => val * window[j]);
+
+    const spectrum = dft(windowedFrame);
+
+    const magnitudes: number[] = [];
+    const phases: number[] = [];
+
+    for (let k = 0; k < numFreqBins; k++) {
+      const mag = Math.sqrt(spectrum[k].real ** 2 + spectrum[k].imag ** 2);
+      const phase = Math.atan2(spectrum[k].imag, spectrum[k].real);
+      magnitudes.push(mag);
+      phases.push(phase);
+    }
+
+    magnitudeSpectrogram.push(magnitudes);
+    phaseSpectrogram.push(phases);
+    timeFrames.push(((startIdx + frameLength / 2) / sampleRate));
+  }
+
+  return { magnitudeSpectrogram, phaseSpectrogram, timeFrames, frequencyBins };
+}

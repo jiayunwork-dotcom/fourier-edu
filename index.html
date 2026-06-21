@@ -18,6 +18,7 @@
         <button class="tab-btn" data-tab="sampling">采样定理</button>
         <button class="tab-btn" data-tab="filter">频域滤波</button>
         <button class="tab-btn" data-tab="spectrum-editor">频谱编辑器</button>
+        <button class="tab-btn" data-tab="stft">STFT瀑布图</button>
         <button class="tab-btn" data-tab="mic">实时麦克风</button>
         <button class="tab-btn" data-tab="levels">教学关卡</button>
       </nav>
@@ -495,6 +496,145 @@
                 <h3>频域频谱</h3>
                 <canvas id="mic-frequency-domain" width="750" height="350"></canvas>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="stft-tab" class="tab-content">
+        <div class="stft-container">
+          <div class="stft-controls">
+            <h2>STFT参数设置</h2>
+
+            <div class="stft-section">
+              <h3>信号源</h3>
+              <div class="control-group">
+                <label>选择信号源:</label>
+                <select id="stft-signal-source">
+                  <option value="builtin">内置测试信号</option>
+                  <option value="imported">从信号构造导入</option>
+                  <option value="manual">手动输入采样点</option>
+                </select>
+              </div>
+
+              <div class="control-group" id="stft-builtin-group">
+                <label>内置测试信号:</label>
+                <select id="stft-builtin-signal">
+                  <option value="chirp">线性Chirp (100Hz→3000Hz, 1s, 8kHz)</option>
+                  <option value="dual">双频切换 (前半段500Hz, 后半段2000Hz)</option>
+                  <option value="am">AM调幅 (载波1500Hz, 调制5Hz)</option>
+                </select>
+              </div>
+
+              <div class="control-group" id="stft-manual-group" style="display: none;">
+                <label>手动输入采样点 (JSON数组):</label>
+                <textarea id="stft-manual-input" rows="4" placeholder="[0.1, 0.5, -0.3, ...]"></textarea>
+                <p class="hint">采样率8000Hz，支持任意长度数组</p>
+              </div>
+
+              <div class="control-group" id="stft-imported-group" style="display: none;">
+                <label>采样率 (Hz):</label>
+                <select id="stft-imported-samplerate">
+                  <option value="1000">1000</option>
+                  <option value="2000">2000</option>
+                  <option value="4000">4000</option>
+                  <option value="8000" selected>8000</option>
+                </select>
+              </div>
+
+              <button id="stft-load-signal" class="btn btn-primary" style="width: 100%;">加载信号</button>
+            </div>
+
+            <div class="stft-section">
+              <h3>STFT参数</h3>
+              <div class="control-group">
+                <label>帧长 (窗长):</label>
+                <select id="stft-frame-length">
+                  <option value="64">64</option>
+                  <option value="128">128</option>
+                  <option value="256" selected>256</option>
+                  <option value="512">512</option>
+                </select>
+              </div>
+
+              <div class="control-group">
+                <label>帧移 (Hop Size):</label>
+                <select id="stft-hop-size">
+                  <option value="25">25% 帧长</option>
+                  <option value="50" selected>50% 帧长</option>
+                  <option value="75">75% 帧长</option>
+                </select>
+              </div>
+
+              <div class="control-group">
+                <label>窗函数:</label>
+                <select id="stft-window">
+                  <option value="rect">矩形窗</option>
+                  <option value="hanning" selected>汉宁窗</option>
+                  <option value="hamming">汉明窗</option>
+                  <option value="blackman">布莱克曼窗</option>
+                </select>
+              </div>
+
+              <div class="control-group">
+                <label>动态范围 (dB): <span id="stft-db-range-value">-60 ~ 0 dB</span></label>
+                <input type="range" id="stft-db-range" min="10" max="100" value="60" step="5">
+              </div>
+            </div>
+
+            <div class="stft-section">
+              <h3>时频分辨率</h3>
+              <div class="resolution-display">
+                <div class="resolution-item">
+                  <span class="resolution-label">时间分辨率:</span>
+                  <span class="resolution-value" id="stft-time-resolution">32.0 ms</span>
+                </div>
+                <div class="resolution-item">
+                  <span class="resolution-label">频率分辨率:</span>
+                  <span class="resolution-value" id="stft-freq-resolution">31.25 Hz</span>
+                </div>
+              </div>
+              <div class="uncertainty-container">
+                <canvas id="stft-uncertainty-canvas" width="280" height="120"></canvas>
+                <p class="hint">矩形面积恒定，演示不确定性原理</p>
+              </div>
+            </div>
+
+            <div class="stft-section">
+              <h3>交互说明</h3>
+              <ul class="stft-hints">
+                <li>🖱️ 悬停查看时间、频率、能量</li>
+                <li>👆 点击查看单帧频谱</li>
+                <li>📐 拖拽框选查看区域平均频谱</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="stft-display">
+            <div class="stft-info-bar" id="stft-info-bar">
+              悬停在瀑布图上查看详细信息
+            </div>
+
+            <div class="waveform-thumbnail-container">
+              <canvas id="stft-waveform-canvas" width="800" height="60"></canvas>
+            </div>
+
+            <div class="spectrogram-container">
+              <canvas id="stft-spectrogram-canvas" width="800" height="400"></canvas>
+              <div class="colorbar-container">
+                <canvas id="stft-colorbar-canvas" width="30" height="400"></canvas>
+              </div>
+            </div>
+
+            <div class="stft-side-panel" id="stft-side-panel">
+              <h3 id="stft-panel-title">瞬时频谱</h3>
+              <canvas id="stft-frame-spectrum-canvas" width="300" height="250"></canvas>
+              <button id="stft-close-panel" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem;">关闭</button>
+            </div>
+
+            <div class="stft-selection-info" id="stft-selection-info" style="display: none;">
+              选中区域: <span id="stft-selection-time">0.000s ~ 0.000s</span> |
+              <span id="stft-selection-freq">0Hz ~ 0Hz</span>
             </div>
           </div>
         </div>

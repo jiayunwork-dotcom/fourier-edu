@@ -7,12 +7,14 @@ import { FrequencyFilter } from './frequencyFilter';
 import { RealtimeMic } from './realtimeMic';
 import { LevelsSystem } from './levels';
 import { SpectrumEditor } from './spectrumEditor';
+import { STFTSpectrogram } from './stftSpectrogram';
 
 class App {
   private signalBuilder: SignalBuilder | null = null;
   private spectrumAnalysis: SpectrumAnalysis | null = null;
   private frequencyFilter: FrequencyFilter | null = null;
   private spectrumEditor: SpectrumEditor | null = null;
+  private stftSpectrogram: STFTSpectrogram | null = null;
 
   private initializedTabs: Set<string> = new Set();
 
@@ -94,6 +96,12 @@ class App {
           this.spectrumEditor.setSignalBuilder(this.signalBuilder);
         }
         break;
+      case 'stft':
+        this.stftSpectrogram = new STFTSpectrogram();
+        if (this.signalBuilder) {
+          this.stftSpectrogram.setSignalBuilder(this.signalBuilder);
+        }
+        break;
     }
 
     this.initializedTabs.add(tabName);
@@ -107,6 +115,11 @@ class App {
       }
       if (this.frequencyFilter && this.initializedTabs.has('filter')) {
         this.frequencyFilter.setSignal(signal);
+      }
+      if (this.stftSpectrogram && this.initializedTabs.has('stft')) {
+        if (this.stftSpectrogram['signalBuilder']) {
+          this.stftSpectrogram.setSignalBuilder(this.signalBuilder);
+        }
       }
     }
   }
