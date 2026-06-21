@@ -601,11 +601,26 @@
             </div>
 
             <div class="stft-section">
+              <h3>频谱峰追踪</h3>
+              <button id="stft-start-peak-tracking" class="btn btn-primary" style="width: 100%;">启动峰追踪</button>
+              <button id="stft-stop-peak-tracking" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem;">停止峰追踪</button>
+            </div>
+
+            <div class="stft-section">
+              <h3>时频遮罩编辑</h3>
+              <button id="stft-clear-masks" class="btn btn-secondary" style="width: 100%;">清除所有遮罩</button>
+              <button id="stft-apply-mask" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">应用遮罩</button>
+              <p class="hint" style="margin-top: 0.5rem;">按住Shift键拖拽绘制遮罩矩形，单击遮罩选中后按Delete删除</p>
+            </div>
+
+            <div class="stft-section">
               <h3>交互说明</h3>
               <ul class="stft-hints">
                 <li>🖱️ 悬停查看时间、频率、能量</li>
                 <li>👆 点击查看单帧频谱</li>
                 <li>📐 拖拽框选查看区域平均频谱</li>
+                <li>🔴 Shift+拖拽绘制时频遮罩</li>
+                <li>🗑️ 选中遮罩后按Delete删除</li>
               </ul>
             </div>
           </div>
@@ -635,6 +650,15 @@
             <div class="stft-selection-info" id="stft-selection-info" style="display: none;">
               选中区域: <span id="stft-selection-time">0.000s ~ 0.000s</span> |
               <span id="stft-selection-freq">0Hz ~ 0Hz</span>
+            </div>
+
+            <div class="reconstructed-section" id="stft-reconstructed-section" style="display: none;">
+              <div class="section-header">
+                <h3>重建时域信号</h3>
+                <button id="stft-play-reconstructed" class="btn btn-primary">🔊 播放重建信号</button>
+                <button id="stft-stop-reconstructed" class="btn btn-secondary" style="display: none;">⏹ 停止播放</button>
+              </div>
+              <canvas id="stft-reconstructed-canvas" width="800" height="120"></canvas>
             </div>
           </div>
         </div>

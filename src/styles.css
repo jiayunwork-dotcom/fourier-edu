@@ -1056,6 +1056,32 @@ canvas {
   font-weight: 600;
 }
 
+.reconstructed-section {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(255, 107, 107, 0.05);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+  border-radius: 8px;
+}
+
+.reconstructed-section .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.reconstructed-section h3 {
+  color: #ff6b6b;
+  margin-bottom: 0;
+}
+
+#stft-reconstructed-canvas {
+  width: 100%;
+  background: #0d1117;
+  border-radius: 6px;
+}
+
 @media (max-width: 1200px) {
   .stft-container {
     grid-template-columns: 1fr;
