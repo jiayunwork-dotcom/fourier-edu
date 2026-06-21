@@ -373,6 +373,30 @@ export class STFTSpectrogram {
     this.waveformCtx.fillText('时域波形', 5, 15);
   }
 
+  private pixelYToFreqBin(canvasY: number, numFreqBins: number): number {
+    const plotHeight = this.spectrogramCanvas.height - 2 * this.padding;
+    const norm = 1 - (canvasY - this.padding) / plotHeight;
+    return Math.max(0, Math.min(numFreqBins - 1, Math.round(norm * (numFreqBins - 1))));
+  }
+
+  private pixelXToFrameIdx(canvasX: number, numFrames: number): number {
+    const plotWidth = this.spectrogramCanvas.width - 2 * this.padding;
+    const norm = (canvasX - this.padding) / plotWidth;
+    return Math.max(0, Math.min(numFrames - 1, Math.round(norm * (numFrames - 1))));
+  }
+
+  private freqBinToPixelY(freqBinIdx: number, numFreqBins: number): number {
+    const plotHeight = this.spectrogramCanvas.height - 2 * this.padding;
+    const norm = 1 - freqBinIdx / (numFreqBins - 1);
+    return this.padding + norm * plotHeight;
+  }
+
+  private frameIdxToPixelX(frameIdx: number, numFrames: number): number {
+    const plotWidth = this.spectrogramCanvas.width - 2 * this.padding;
+    const norm = frameIdx / (numFrames - 1);
+    return this.padding + norm * plotWidth;
+  }
+
   private renderSpectrogram(): void {
     if (!this.stftResult) return;
 
@@ -386,27 +410,31 @@ export class STFTSpectrogram {
     const numFreqBins = dbSpectrogram[0].length;
 
     const plotWidth = width - 2 * this.padding;
-    const plotHeight = height - 2 * this.padding;
-
-    const cellWidth = plotWidth / numFrames;
-    const cellHeight = plotHeight / numFreqBins;
 
     const minDB = -this.settings.dbRange;
     const maxDB = 0;
 
     for (let frameIdx = 0; frameIdx < numFrames; frameIdx++) {
-      for (let freqIdx = 0; freqIdx < numFreqBins; freqIdx++) {
-        const db = dbSpectrogram[frameIdx][numFreqBins - 1 - freqIdx];
+      const xLeft = this.frameIdxToPixelX(frameIdx, numFrames);
+      const xRight = this.frameIdxToPixelX(frameIdx + 1 < numFrames ? frameIdx + 1 : frameIdx, numFrames);
+      let cellWidth = xRight - xLeft;
+      if (frameIdx === numFrames - 1) {
+        cellWidth = (this.padding + plotWidth) - xLeft;
+      }
+      cellWidth = Math.max(cellWidth, 1);
+
+      for (let freqBinIdx = 0; freqBinIdx < numFreqBins; freqBinIdx++) {
+        const yTop = this.freqBinToPixelY(freqBinIdx + 1, numFreqBins);
+        const yBottom = this.freqBinToPixelY(freqBinIdx, numFreqBins);
+        let cellHeight = yBottom - yTop;
+        cellHeight = Math.max(cellHeight, 1);
+
+        const db = dbSpectrogram[frameIdx][freqBinIdx];
         const normalized = Math.max(0, Math.min(1, (db - minDB) / (maxDB - minDB)));
         const color = viridisColor(normalized);
 
         this.spectrogramCtx.fillStyle = color;
-        this.spectrogramCtx.fillRect(
-          this.padding + frameIdx * cellWidth,
-          this.padding + freqIdx * cellHeight,
-          Math.ceil(cellWidth),
-          Math.ceil(cellHeight)
-        );
+        this.spectrogramCtx.fillRect(xLeft, yTop, cellWidth, cellHeight);
       }
     }
 
@@ -492,18 +520,16 @@ export class STFTSpectrogram {
       return;
     }
 
-    const timeNorm = (canvasX - this.padding) / plotWidth;
-    const freqNorm = 1 - (canvasY - this.padding) / plotHeight;
+    const { dbSpectrogram, timeFrames, frequencyBins } = this.stftResult;
+    const numFrames = dbSpectrogram.length;
+    const numFreqBins = dbSpectrogram[0].length;
 
-    const { timeFrames, dbSpectrogram } = this.stftResult;
+    const frameIdx = this.pixelXToFrameIdx(canvasX, numFrames);
+    const freqBinIdx = this.pixelYToFreqBin(canvasY, numFreqBins);
 
-    const time = timeFrames[0] + timeNorm * (timeFrames[timeFrames.length - 1] - timeFrames[0]);
-    const freq = freqNorm * (this.sampleRate / 2);
-
-    const frameIdx = Math.floor(timeNorm * dbSpectrogram.length);
-    const freqIdx = Math.floor(freqNorm * (dbSpectrogram[0].length - 1));
-
-    const db = dbSpectrogram[Math.min(frameIdx, dbSpectrogram.length - 1)][Math.min(freqIdx, dbSpectrogram[0].length - 1)];
+    const time = timeFrames[frameIdx];
+    const freq = frequencyBins[freqBinIdx];
+    const db = dbSpectrogram[frameIdx][freqBinIdx];
 
     document.getElementById('stft-info-bar')!.textContent =
       `时间: ${time.toFixed(3)}s | 频率: ${freq.toFixed(1)}Hz | 能量: ${db.toFixed(1)}dB`;
@@ -598,71 +624,73 @@ export class STFTSpectrogram {
   private showFrameSpectrum(clickX: number): void {
     if (!this.stftResult) return;
 
-    const plotWidth = this.spectrogramCanvas.width - 2 * this.padding;
-    const timeNorm = (clickX - this.padding) / plotWidth;
-    const frameIdx = Math.floor(timeNorm * this.stftResult.magnitudeSpectrogram.length);
-    const clampedIdx = Math.max(0, Math.min(frameIdx, this.stftResult.magnitudeSpectrogram.length - 1));
+    const numFrames = this.stftResult.magnitudeSpectrogram.length;
+    const frameIdx = this.pixelXToFrameIdx(clickX, numFrames);
 
-    const magnitudes = this.stftResult.magnitudeSpectrogram[clampedIdx];
+    const magnitudes = this.stftResult.magnitudeSpectrogram[frameIdx];
     const frequencies = this.stftResult.frequencyBins;
-    const time = this.stftResult.timeFrames[clampedIdx];
+    const time = this.stftResult.timeFrames[frameIdx];
 
     document.getElementById('stft-panel-title')!.textContent = `瞬时频谱 @ ${time.toFixed(3)}s`;
 
-    this.renderFrameSpectrum(frequencies, magnitudes);
+    this.renderFrameSpectrum(frequencies, magnitudes, true);
     document.getElementById('stft-side-panel')!.classList.add('active');
   }
 
   private showAverageSpectrum(): void {
     if (!this.stftResult || !this.dragStart || !this.dragEnd) return;
 
-    const plotWidth = this.spectrogramCanvas.width - 2 * this.padding;
-    const plotHeight = this.spectrogramCanvas.height - 2 * this.padding;
+    const { magnitudeSpectrogram, frequencyBins, timeFrames } = this.stftResult;
+    const numFrames = magnitudeSpectrogram.length;
+    const numFreqBins = magnitudeSpectrogram[0].length;
 
     const x1 = Math.min(this.dragStart.x, this.dragEnd.x);
     const x2 = Math.max(this.dragStart.x, this.dragEnd.x);
     const y1 = Math.min(this.dragStart.y, this.dragEnd.y);
     const y2 = Math.max(this.dragStart.y, this.dragEnd.y);
 
-    const timeNorm1 = (x1 - this.padding) / plotWidth;
-    const timeNorm2 = (x2 - this.padding) / plotWidth;
-    const freqNorm1 = 1 - (y1 - this.padding) / plotHeight;
-    const freqNorm2 = 1 - (y2 - this.padding) / plotHeight;
+    const frameStart = this.pixelXToFrameIdx(x1, numFrames);
+    const frameEnd = this.pixelXToFrameIdx(x2, numFrames);
+    const binStart = this.pixelYToFreqBin(y2, numFreqBins);
+    const binEnd = this.pixelYToFreqBin(y1, numFreqBins);
 
-    const { timeFrames, frequencyBins, magnitudeSpectrogram } = this.stftResult;
+    const realFrameStart = Math.min(frameStart, frameEnd);
+    const realFrameEnd = Math.max(frameStart, frameEnd);
+    const realBinStart = Math.min(binStart, binEnd);
+    const realBinEnd = Math.max(binStart, binEnd);
 
-    const timeStart = timeFrames[0] + timeNorm1 * (timeFrames[timeFrames.length - 1] - timeFrames[0]);
-    const timeEnd = timeFrames[0] + timeNorm2 * (timeFrames[timeFrames.length - 1] - timeFrames[0]);
-    const freqStart = freqNorm2 * (this.sampleRate / 2);
-    const freqEnd = freqNorm1 * (this.sampleRate / 2);
+    const timeStart = timeFrames[realFrameStart];
+    const timeEnd = timeFrames[realFrameEnd];
+    const freqStart = frequencyBins[realBinStart];
+    const freqEnd = frequencyBins[realBinEnd];
 
     this.selectedRegion = { timeStart, timeEnd, freqStart, freqEnd };
 
-    const frameStart = Math.max(0, Math.floor(timeNorm1 * magnitudeSpectrogram.length));
-    const frameEnd = Math.min(magnitudeSpectrogram.length - 1, Math.floor(timeNorm2 * magnitudeSpectrogram.length));
-    const binStart = Math.max(0, Math.floor(freqNorm2 * (magnitudeSpectrogram[0].length - 1)));
-    const binEnd = Math.min(magnitudeSpectrogram[0].length - 1, Math.ceil(freqNorm1 * (magnitudeSpectrogram[0].length - 1)));
+    const validFrameStart = Math.max(0, realFrameStart);
+    const validFrameEnd = Math.min(numFrames - 1, realFrameEnd);
+    const validBinStart = Math.max(0, realBinStart);
+    const validBinEnd = Math.min(numFreqBins - 1, realBinEnd);
 
-    const numFrames = frameEnd - frameStart + 1;
-    const numBins = binEnd - binStart + 1;
+    const usedNumFrames = validFrameEnd - validFrameStart + 1;
+    const usedNumBins = validBinEnd - validBinStart + 1;
 
     const avgMagnitudes: number[] = new Array(magnitudeSpectrogram[0].length).fill(0);
 
-    for (let f = frameStart; f <= frameEnd; f++) {
-      for (let b = binStart; b <= binEnd; b++) {
+    for (let f = validFrameStart; f <= validFrameEnd; f++) {
+      for (let b = validBinStart; b <= validBinEnd; b++) {
         avgMagnitudes[b] += magnitudeSpectrogram[f][b];
       }
     }
 
-    for (let b = binStart; b <= binEnd; b++) {
-      avgMagnitudes[b] /= numFrames;
+    for (let b = validBinStart; b <= validBinEnd; b++) {
+      avgMagnitudes[b] /= usedNumFrames;
     }
 
-    const displayFreqs = frequencyBins.slice(binStart, binEnd + 1);
-    const displayMags = avgMagnitudes.slice(binStart, binEnd + 1);
+    const displayFreqs = frequencyBins.slice(validBinStart, validBinEnd + 1);
+    const displayMags = avgMagnitudes.slice(validBinStart, validBinEnd + 1);
 
     document.getElementById('stft-panel-title')!.textContent =
-      `区域平均频谱 (${numFrames}帧 × ${numBins}频点)`;
+      `区域平均频谱 (${usedNumFrames}帧 × ${usedNumBins}频点)`;
 
     document.getElementById('stft-selection-time')!.textContent =
       `${timeStart.toFixed(3)}s ~ ${timeEnd.toFixed(3)}s`;
@@ -670,19 +698,19 @@ export class STFTSpectrogram {
       `${Math.min(freqStart, freqEnd).toFixed(0)}Hz ~ ${Math.max(freqStart, freqEnd).toFixed(0)}Hz`;
     document.getElementById('stft-selection-info')!.style.display = 'block';
 
-    this.renderFrameSpectrum(displayFreqs, displayMags);
+    this.renderFrameSpectrum(displayFreqs, displayMags, false);
     document.getElementById('stft-side-panel')!.classList.add('active');
   }
 
-  private renderFrameSpectrum(frequencies: number[], magnitudes: number[]): void {
+  private renderFrameSpectrum(frequencies: number[], magnitudes: number[], fullRange: boolean): void {
     const width = this.frameSpectrumCanvas.width;
     const height = this.frameSpectrumCanvas.height;
     const padding = 40;
 
     clearCanvas(this.frameSpectrumCtx, width, height);
 
-    const maxFreq = Math.max(...frequencies);
-    const xRange: [number, number] = [0, maxFreq];
+    const maxFreq = fullRange ? this.sampleRate / 2 : Math.max(...frequencies);
+    const xRange: [number, number] = fullRange ? [0, this.sampleRate / 2] : [Math.min(...frequencies), maxFreq];
     const yRange = autoScaleY(magnitudes, 0.15);
 
     drawGrid(this.frameSpectrumCtx, width, height, xRange, yRange, 6, 5);
