@@ -190,10 +190,10 @@ export class SpectrumEditor {
     });
 
     document.getElementById('se-apply-template')!.addEventListener('click', () => {
-      this.applyTemplate();
       if (this.envelopeEditMode) {
-        this.pushUndo('应用模板');
+        this.exitEnvelopeEditMode();
       }
+      this.applyTemplate();
     });
     document.getElementById('se-idft')!.addEventListener('click', () => this.doIDFT());
     document.getElementById('se-verify')!.addEventListener('click', () => this.doVerify());
@@ -243,7 +243,6 @@ export class SpectrumEditor {
 
     document.getElementById('se-extract-envelope')!.addEventListener('click', () => {
       this.extractEnvelope();
-      this.pushUndo('提取包络');
       this.render();
     });
 
@@ -344,6 +343,7 @@ export class SpectrumEditor {
     if (target === 'magnitude' && this.envelopeEditMode) {
       const cpIdx = this.findControlPointAt(e.offsetX, e.offsetY);
       if (cpIdx >= 0) {
+        this.pushUndo('调整控制点');
         this.draggingControlPoint = cpIdx;
         this.isDrawing = true;
         return;
@@ -403,7 +403,6 @@ export class SpectrumEditor {
     if (target === 'magnitude' && this.envelopeEditMode && this.draggingControlPoint >= 0) {
       this.draggingControlPoint = -1;
       this.isDrawing = false;
-      this.pushUndo('调整控制点');
       return;
     }
 
@@ -556,6 +555,8 @@ export class SpectrumEditor {
   }
 
   private extractEnvelope(): void {
+    this.undoStack = [];
+
     const halfN = this.magnitude.length;
     const lifter = Math.max(1, Math.min(this.lifterOrder, Math.floor(halfN / 2)));
 
@@ -597,18 +598,10 @@ export class SpectrumEditor {
 
     const logEnvelope: number[] = [];
     for (let k = 0; k < halfN; k++) {
-      const re = logEnvelopeFull[k].real / this.N;
-      logEnvelope.push(re);
+      logEnvelope.push(logEnvelopeFull[k].real);
     }
 
     this.envelopeCurve = logEnvelope.map(lm => Math.exp(lm));
-
-    const maxOrig = Math.max(...this.magnitude);
-    const maxEnv = Math.max(...this.envelopeCurve);
-    if (maxEnv > 0 && maxOrig > 0) {
-      const scale = maxOrig / maxEnv;
-      this.envelopeCurve = this.envelopeCurve.map(v => v * scale);
-    }
 
     this.fineStructure = [];
     for (let i = 0; i < halfN; i++) {
@@ -665,46 +658,47 @@ export class SpectrumEditor {
     if (halfN < 5 || this.controlPoints.length < 3) return;
 
     const cpSpacing = this.controlPoints.length > 1
-      ? Math.ceil((this.controlPoints[1].binIndex - this.controlPoints[0].binIndex))
+      ? (this.controlPoints[this.controlPoints.length - 1].binIndex - this.controlPoints[0].binIndex) / (this.controlPoints.length - 1)
       : 1;
-    const minGap = Math.max(3, cpSpacing * 1.5);
-    const minGapBins = Math.ceil(minGap);
+    const minGapBins = Math.max(3, Math.ceil(3 * cpSpacing));
 
-    const envDB: number[] = this.envelopeCurve.map(v => {
-      const ref = Math.max(...this.envelopeCurve, 1e-10);
-      return 20 * Math.log10(Math.max(v / ref, 1e-10));
-    });
+    const maxEnv = Math.max(...this.envelopeCurve);
+    if (maxEnv <= 1e-10) return;
 
-    const candidatePeaks: { bin: number; value: number; db: number }[] = [];
+    const envDB: number[] = this.envelopeCurve.map(v =>
+      20 * Math.log10(Math.max(v, 1e-10) / maxEnv)
+    );
 
-    for (let i = 2; i < halfN - 2; i++) {
-      if (
-        envDB[i] > envDB[i - 1] &&
-        envDB[i] >= envDB[i + 1] &&
-        envDB[i] > envDB[i - 2] &&
-        envDB[i] >= envDB[i + 2]
-      ) {
-        let leftValley = envDB[i - 1];
-        for (let j = i - 2; j >= Math.max(0, i - minGapBins); j--) {
-          if (envDB[j] < leftValley) leftValley = envDB[j];
+    const candidatePeaks: { bin: number; value: number; db: number; prominence: number }[] = [];
+
+    for (let i = 1; i < halfN - 1; i++) {
+      if (this.envelopeCurve[i] >= this.envelopeCurve[i - 1] &&
+          this.envelopeCurve[i] >= this.envelopeCurve[i + 1] &&
+          (this.envelopeCurve[i] > this.envelopeCurve[i - 1] ||
+           this.envelopeCurve[i] > this.envelopeCurve[i + 1])) {
+
+        let leftMin = envDB[i];
+        for (let j = i - 1; j >= Math.max(0, i - minGapBins); j--) {
+          if (envDB[j] < leftMin) leftMin = envDB[j];
         }
-        let rightValley = envDB[i + 1];
-        for (let j = i + 2; j <= Math.min(halfN - 1, i + minGapBins); j++) {
-          if (envDB[j] < rightValley) rightValley = envDB[j];
+        let rightMin = envDB[i];
+        for (let j = i + 1; j <= Math.min(halfN - 1, i + minGapBins); j++) {
+          if (envDB[j] < rightMin) rightMin = envDB[j];
         }
-        const prominence = Math.min(envDB[i] - leftValley, envDB[i] - rightValley);
+        const prominence = Math.min(envDB[i] - leftMin, envDB[i] - rightMin);
 
-        if (prominence >= 3 && envDB[i] > -40) {
+        if (prominence >= 3) {
           candidatePeaks.push({
             bin: i,
             value: this.envelopeCurve[i],
             db: envDB[i],
+            prominence,
           });
         }
       }
     }
 
-    candidatePeaks.sort((a, b) => b.db - a.db);
+    candidatePeaks.sort((a, b) => b.prominence - a.prominence);
 
     const selected: { bin: number; value: number; db: number }[] = [];
     for (const peak of candidatePeaks) {
@@ -716,7 +710,7 @@ export class SpectrumEditor {
         }
       }
       if (!tooClose) {
-        selected.push(peak);
+        selected.push({ bin: peak.bin, value: peak.value, db: peak.db });
       }
     }
 
