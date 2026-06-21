@@ -3,6 +3,7 @@ import {
   dft,
   idft,
   normalize,
+  cubicSplineInterpolation,
 } from './mathUtils';
 
 import {
@@ -21,6 +22,21 @@ interface SpectrumSlot {
   phase: number[];
   N: number;
   sampleRate: number;
+}
+
+interface ControlPoint {
+  binIndex: number;
+  value: number;
+}
+
+interface EnvelopeState {
+  controlPoints: ControlPoint[];
+  envelopeCurve: number[];
+}
+
+interface UndoEntry {
+  envelope: EnvelopeState;
+  description: string;
 }
 
 export class SpectrumEditor {
@@ -47,6 +63,18 @@ export class SpectrumEditor {
   private lineStartBin: number = -1;
   private lineStartValue: number = 0;
 
+  private envelopeExtracted: boolean = false;
+  private envelopeEditMode: boolean = false;
+  private lifterOrder: number = 32;
+  private envelopeCurve: number[] = [];
+  private fineStructure: number[] = [];
+  private controlPoints: ControlPoint[] = [];
+  private draggingControlPoint: number = -1;
+  private formants: { bin: number; freq: number; value: number }[] = [];
+
+  private undoStack: UndoEntry[] = [];
+  private readonly MAX_UNDO = 5;
+
   private magCanvas: HTMLCanvasElement;
   private magCtx: CanvasRenderingContext2D;
   private phaseCanvas: HTMLCanvasElement;
@@ -61,6 +89,7 @@ export class SpectrumEditor {
   private signalBuilder: any = null;
 
   private readonly PADDING = 50;
+  private readonly CONTROL_POINT_RADIUS = 8;
 
   constructor() {
     this.magCanvas = document.getElementById('se-magnitude-canvas') as HTMLCanvasElement;
@@ -73,6 +102,7 @@ export class SpectrumEditor {
     this.initSpectrum();
     this.setupEventListeners();
     this.updateTemplateVisibility();
+    this.updateEnvelopeUI();
     this.render();
   }
 
@@ -87,6 +117,19 @@ export class SpectrumEditor {
     this.timeSignal = new Array(this.N).fill(0);
     this.verifyMagnitude = null;
     this.verifyPhase = null;
+    this.resetEnvelopeState();
+  }
+
+  private resetEnvelopeState(): void {
+    this.envelopeExtracted = false;
+    this.envelopeEditMode = false;
+    this.envelopeCurve = [];
+    this.fineStructure = [];
+    this.controlPoints = [];
+    this.draggingControlPoint = -1;
+    this.formants = [];
+    this.undoStack = [];
+    this.updateEnvelopeUI();
   }
 
   private setupEventListeners(): void {
@@ -115,6 +158,7 @@ export class SpectrumEditor {
         document.querySelectorAll('.target-btn').forEach(b => b.classList.remove('active'));
         (e.target as HTMLElement).classList.add('active');
         this.editTarget = (e.target as HTMLElement).dataset.target as EditTarget;
+        this.render();
       });
     });
 
@@ -145,7 +189,12 @@ export class SpectrumEditor {
       }
     });
 
-    document.getElementById('se-apply-template')!.addEventListener('click', () => this.applyTemplate());
+    document.getElementById('se-apply-template')!.addEventListener('click', () => {
+      this.applyTemplate();
+      if (this.envelopeEditMode) {
+        this.pushUndo('应用模板');
+      }
+    });
     document.getElementById('se-idft')!.addEventListener('click', () => this.doIDFT());
     document.getElementById('se-verify')!.addEventListener('click', () => this.doVerify());
     document.getElementById('se-clear')!.addEventListener('click', () => this.clearSpectrum());
@@ -175,6 +224,45 @@ export class SpectrumEditor {
     document.getElementById('se-op-add')!.addEventListener('click', () => this.doOperation('add'));
     document.getElementById('se-op-mul')!.addEventListener('click', () => this.doOperation('mul'));
     document.getElementById('se-op-sub')!.addEventListener('click', () => this.doOperation('sub'));
+
+    const lifterSlider = document.getElementById('se-lifter') as HTMLInputElement;
+    const lifterValue = document.getElementById('se-lifter-value') as HTMLElement;
+    const maxLifter = Math.floor(this.N / 4);
+    lifterSlider.max = String(maxLifter);
+    lifterSlider.value = String(Math.min(this.lifterOrder, maxLifter));
+    this.lifterOrder = parseInt(lifterSlider.value);
+    lifterValue.textContent = String(this.lifterOrder);
+    lifterSlider.addEventListener('input', () => {
+      this.lifterOrder = parseInt(lifterSlider.value);
+      lifterValue.textContent = String(this.lifterOrder);
+      if (this.envelopeExtracted) {
+        this.extractEnvelope();
+        this.render();
+      }
+    });
+
+    document.getElementById('se-extract-envelope')!.addEventListener('click', () => {
+      this.extractEnvelope();
+      this.pushUndo('提取包络');
+      this.render();
+    });
+
+    document.getElementById('se-apply-envelope')!.addEventListener('click', () => {
+      if (this.envelopeEditMode) {
+        this.applyEnvelope();
+      }
+    });
+
+    document.getElementById('se-exit-envelope')!.addEventListener('click', () => {
+      this.exitEnvelopeEditMode();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        this.undo();
+      }
+    });
 
     this.setupCanvasInteraction(this.magCanvas, 'magnitude');
     this.setupCanvasInteraction(this.phaseCanvas, 'phase');
@@ -216,6 +304,11 @@ export class SpectrumEditor {
     return Math.max(0, Math.min(halfN - 1, Math.floor(relX * halfN)));
   }
 
+  private getXFromBin(bin: number, canvasWidth: number, halfN: number): number {
+    const plotWidth = canvasWidth - 2 * this.PADDING;
+    return this.PADDING + (bin / halfN) * plotWidth;
+  }
+
   private getMagnitudeFromY(y: number, canvasHeight: number, yRange: [number, number]): number {
     const plotHeight = canvasHeight - 2 * this.PADDING;
     const yScale = plotHeight / (yRange[1] - yRange[0]);
@@ -223,8 +316,43 @@ export class SpectrumEditor {
     return Math.max(yRange[0], Math.min(yRange[1], value));
   }
 
+  private getYFromMagnitude(value: number, canvasHeight: number, yRange: [number, number]): number {
+    const plotHeight = canvasHeight - 2 * this.PADDING;
+    const yScale = plotHeight / (yRange[1] - yRange[0]);
+    return this.PADDING + (yRange[1] - value) * yScale;
+  }
+
+  private findControlPointAt(x: number, y: number): number {
+    if (!this.envelopeEditMode) return -1;
+    const halfN = this.magnitude.length;
+    const yRange: [number, number] = [0, 2];
+
+    for (let i = 0; i < this.controlPoints.length; i++) {
+      const cp = this.controlPoints[i];
+      const cpX = this.getXFromBin(cp.binIndex + 0.5, this.magCanvas.width, halfN);
+      const cpY = this.getYFromMagnitude(cp.value, this.magCanvas.height, yRange);
+      const dx = x - cpX;
+      const dy = y - cpY;
+      if (Math.sqrt(dx * dx + dy * dy) <= this.CONTROL_POINT_RADIUS + 4) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   private onCanvasMouseDown(e: MouseEvent, target: EditTarget): void {
+    if (target === 'magnitude' && this.envelopeEditMode) {
+      const cpIdx = this.findControlPointAt(e.offsetX, e.offsetY);
+      if (cpIdx >= 0) {
+        this.draggingControlPoint = cpIdx;
+        this.isDrawing = true;
+        return;
+      }
+    }
+
     if (target !== this.editTarget) return;
+    if (this.envelopeEditMode && target === 'magnitude') return;
+
     this.isDrawing = true;
     const canvas = target === 'magnitude' ? this.magCanvas : this.phaseCanvas;
     const bin = this.getBinFromX(e.offsetX, canvas.width);
@@ -246,7 +374,19 @@ export class SpectrumEditor {
   }
 
   private onCanvasMouseMove(e: MouseEvent, target: EditTarget): void {
+    if (target === 'magnitude' && this.envelopeEditMode && this.draggingControlPoint >= 0) {
+      const yRange: [number, number] = [0, 2];
+      const newValue = this.getMagnitudeFromY(e.offsetY, this.magCanvas.height, yRange);
+      this.controlPoints[this.draggingControlPoint].value = Math.max(0, newValue);
+      this.updateEnvelopeFromControlPoints();
+      this.detectFormants();
+      this.render();
+      return;
+    }
+
     if (!this.isDrawing || target !== this.editTarget) return;
+    if (this.envelopeEditMode && target === 'magnitude') return;
+
     const canvas = target === 'magnitude' ? this.magCanvas : this.phaseCanvas;
     const bin = this.getBinFromX(e.offsetX, canvas.width);
 
@@ -260,7 +400,19 @@ export class SpectrumEditor {
   }
 
   private onCanvasMouseUp(e: MouseEvent | null, target: EditTarget): void {
+    if (target === 'magnitude' && this.envelopeEditMode && this.draggingControlPoint >= 0) {
+      this.draggingControlPoint = -1;
+      this.isDrawing = false;
+      this.pushUndo('调整控制点');
+      return;
+    }
+
     if (!this.isDrawing || target !== this.editTarget) {
+      this.isDrawing = false;
+      this.draggingControlPoint = -1;
+      return;
+    }
+    if (this.envelopeEditMode && target === 'magnitude') {
       this.isDrawing = false;
       return;
     }
@@ -355,6 +507,16 @@ export class SpectrumEditor {
     this.phase = newPhase;
     this.verifyMagnitude = null;
     this.verifyPhase = null;
+
+    const lifterSlider = document.getElementById('se-lifter') as HTMLInputElement;
+    const lifterValue = document.getElementById('se-lifter-value') as HTMLElement;
+    const maxLifter = Math.floor(this.N / 4);
+    lifterSlider.max = String(maxLifter);
+    this.lifterOrder = Math.min(this.lifterOrder, maxLifter);
+    lifterSlider.value = String(this.lifterOrder);
+    lifterValue.textContent = String(this.lifterOrder);
+
+    this.resetEnvelopeState();
     this.render();
   }
 
@@ -369,6 +531,251 @@ export class SpectrumEditor {
     centerGroup.style.display = template === 'bandpass' ? 'block' : 'none';
     bandwidthGroup.style.display = template === 'bandpass' ? 'block' : 'none';
     combGroup.style.display = template === 'comb' ? 'block' : 'none';
+  }
+
+  private updateEnvelopeUI(): void {
+    const applyBtn = document.getElementById('se-apply-envelope') as HTMLButtonElement;
+    const exitBtn = document.getElementById('se-exit-envelope') as HTMLButtonElement;
+    const statusEl = document.getElementById('se-envelope-status') as HTMLElement;
+    const undoBtn = document.getElementById('se-undo') as HTMLButtonElement;
+
+    applyBtn.disabled = !this.envelopeEditMode;
+    exitBtn.disabled = !this.envelopeEditMode;
+    undoBtn.disabled = this.undoStack.length === 0;
+
+    if (this.envelopeEditMode) {
+      statusEl.textContent = '🟢 包络编辑模式 (Ctrl+Z撤销)';
+      statusEl.style.color = '#66bb6a';
+    } else if (this.envelopeExtracted) {
+      statusEl.textContent = '🟡 包络已提取，可进入编辑';
+      statusEl.style.color = '#ffa726';
+    } else {
+      statusEl.textContent = '⚪ 未提取包络';
+      statusEl.style.color = '#b0b0b0';
+    }
+  }
+
+  private extractEnvelope(): void {
+    const halfN = this.magnitude.length;
+    const lifter = Math.max(1, Math.min(this.lifterOrder, Math.floor(halfN / 2)));
+
+    const logMag: number[] = [];
+    for (let i = 0; i < halfN; i++) {
+      const mag = Math.max(this.magnitude[i], 1e-10);
+      logMag.push(Math.log(mag));
+    }
+
+    const fullLogMag: Complex[] = [];
+    for (let k = 0; k < this.N; k++) {
+      if (k === 0) {
+        fullLogMag.push({ real: logMag[0], imag: 0 });
+      } else if (k < halfN) {
+        fullLogMag.push({ real: logMag[k], imag: 0 });
+      } else if (k === halfN && this.N % 2 === 0) {
+        fullLogMag.push({ real: logMag[halfN - 1], imag: 0 });
+      } else {
+        const mirrorK = this.N - k;
+        fullLogMag.push({ real: logMag[mirrorK], imag: 0 });
+      }
+    }
+
+    const cepstrum = idft(fullLogMag);
+
+    const lifteredCepstrum: Complex[] = [];
+    for (let n = 0; n < this.N; n++) {
+      let weight = 0;
+      if (n <= lifter || n >= this.N - lifter) {
+        weight = 1;
+      }
+      lifteredCepstrum.push({
+        real: cepstrum[n] * weight,
+        imag: 0,
+      });
+    }
+
+    const logEnvelopeFull = dft(lifteredCepstrum.map(c => c.real));
+
+    const logEnvelope: number[] = [];
+    for (let k = 0; k < halfN; k++) {
+      const re = logEnvelopeFull[k].real / this.N;
+      logEnvelope.push(re);
+    }
+
+    this.envelopeCurve = logEnvelope.map(lm => Math.exp(lm));
+
+    const maxOrig = Math.max(...this.magnitude);
+    const maxEnv = Math.max(...this.envelopeCurve);
+    if (maxEnv > 0 && maxOrig > 0) {
+      const scale = maxOrig / maxEnv;
+      this.envelopeCurve = this.envelopeCurve.map(v => v * scale);
+    }
+
+    this.fineStructure = [];
+    for (let i = 0; i < halfN; i++) {
+      const env = Math.max(this.envelopeCurve[i], 1e-10);
+      this.fineStructure.push(this.magnitude[i] / env);
+    }
+
+    this.buildControlPoints(lifter);
+    this.envelopeExtracted = true;
+    this.envelopeEditMode = true;
+    this.detectFormants();
+    this.updateEnvelopeUI();
+  }
+
+  private buildControlPoints(numPoints: number): void {
+    const halfN = this.magnitude.length;
+    const n = Math.max(2, Math.min(numPoints, halfN));
+    this.controlPoints = [];
+
+    for (let i = 0; i < n; i++) {
+      const binIndex = Math.floor((i / (n - 1)) * (halfN - 1));
+      const safeIdx = Math.max(0, Math.min(halfN - 1, binIndex));
+      this.controlPoints.push({
+        binIndex: safeIdx,
+        value: this.envelopeCurve[safeIdx],
+      });
+    }
+
+    this.updateEnvelopeFromControlPoints();
+  }
+
+  private updateEnvelopeFromControlPoints(): void {
+    const halfN = this.magnitude.length;
+    if (this.controlPoints.length < 2) return;
+
+    const xControl = this.controlPoints.map(cp => cp.binIndex);
+    const yControl = this.controlPoints.map(cp => Math.max(1e-10, cp.value));
+
+    const xQuery: number[] = [];
+    for (let i = 0; i < halfN; i++) {
+      xQuery.push(i);
+    }
+
+    const yQuery = cubicSplineInterpolation(xControl, yControl, xQuery);
+    this.envelopeCurve = yQuery.map(v => Math.max(0, v));
+    this.detectFormants();
+  }
+
+  private detectFormants(): void {
+    this.formants = [];
+    const halfN = this.envelopeCurve.length;
+    const freqStep = (this.sampleRate / 2) / halfN;
+
+    if (halfN < 5 || this.controlPoints.length < 3) return;
+
+    const cpSpacing = this.controlPoints.length > 1
+      ? Math.ceil((this.controlPoints[1].binIndex - this.controlPoints[0].binIndex))
+      : 1;
+    const minGap = Math.max(3, cpSpacing * 1.5);
+    const minGapBins = Math.ceil(minGap);
+
+    const envDB: number[] = this.envelopeCurve.map(v => {
+      const ref = Math.max(...this.envelopeCurve, 1e-10);
+      return 20 * Math.log10(Math.max(v / ref, 1e-10));
+    });
+
+    const candidatePeaks: { bin: number; value: number; db: number }[] = [];
+
+    for (let i = 2; i < halfN - 2; i++) {
+      if (
+        envDB[i] > envDB[i - 1] &&
+        envDB[i] >= envDB[i + 1] &&
+        envDB[i] > envDB[i - 2] &&
+        envDB[i] >= envDB[i + 2]
+      ) {
+        let leftValley = envDB[i - 1];
+        for (let j = i - 2; j >= Math.max(0, i - minGapBins); j--) {
+          if (envDB[j] < leftValley) leftValley = envDB[j];
+        }
+        let rightValley = envDB[i + 1];
+        for (let j = i + 2; j <= Math.min(halfN - 1, i + minGapBins); j++) {
+          if (envDB[j] < rightValley) rightValley = envDB[j];
+        }
+        const prominence = Math.min(envDB[i] - leftValley, envDB[i] - rightValley);
+
+        if (prominence >= 3 && envDB[i] > -40) {
+          candidatePeaks.push({
+            bin: i,
+            value: this.envelopeCurve[i],
+            db: envDB[i],
+          });
+        }
+      }
+    }
+
+    candidatePeaks.sort((a, b) => b.db - a.db);
+
+    const selected: { bin: number; value: number; db: number }[] = [];
+    for (const peak of candidatePeaks) {
+      let tooClose = false;
+      for (const s of selected) {
+        if (Math.abs(peak.bin - s.bin) < minGapBins) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (!tooClose) {
+        selected.push(peak);
+      }
+    }
+
+    selected.sort((a, b) => a.bin - b.bin);
+
+    for (let i = 0; i < Math.min(selected.length, 5); i++) {
+      this.formants.push({
+        bin: selected[i].bin,
+        freq: selected[i].bin * freqStep,
+        value: selected[i].value,
+      });
+    }
+  }
+
+  private applyEnvelope(): void {
+    if (!this.envelopeEditMode) return;
+
+    const halfN = this.magnitude.length;
+    for (let i = 0; i < halfN; i++) {
+      this.magnitude[i] = Math.max(0, this.envelopeCurve[i] * this.fineStructure[i]);
+    }
+
+    this.verifyMagnitude = null;
+    this.verifyPhase = null;
+    this.exitEnvelopeEditMode();
+    this.render();
+  }
+
+  private exitEnvelopeEditMode(): void {
+    this.envelopeEditMode = false;
+    this.draggingControlPoint = -1;
+    this.undoStack = [];
+    this.updateEnvelopeUI();
+    this.render();
+  }
+
+  private pushUndo(description: string): void {
+    if (!this.envelopeEditMode) return;
+    this.undoStack.push({
+      envelope: {
+        controlPoints: this.controlPoints.map(cp => ({ ...cp })),
+        envelopeCurve: [...this.envelopeCurve],
+      },
+      description,
+    });
+    if (this.undoStack.length > this.MAX_UNDO) {
+      this.undoStack.shift();
+    }
+    this.updateEnvelopeUI();
+  }
+
+  private undo(): void {
+    if (!this.envelopeEditMode || this.undoStack.length === 0) return;
+    const entry = this.undoStack.pop()!;
+    this.controlPoints = entry.envelope.controlPoints.map(cp => ({ ...cp }));
+    this.envelopeCurve = [...entry.envelope.envelopeCurve];
+    this.detectFormants();
+    this.updateEnvelopeUI();
+    this.render();
   }
 
   private applyTemplate(): void {
@@ -445,30 +852,31 @@ export class SpectrumEditor {
     this.render();
   }
 
-  private buildFullSpectrum(): Complex[] {
+  private buildFullSpectrum(magnitudeOverride?: number[]): Complex[] {
     const spectrum: Complex[] = [];
     const halfN = this.magnitude.length;
     const scale = this.N / 2;
+    const mag = magnitudeOverride || this.magnitude;
 
     for (let k = 0; k < this.N; k++) {
       if (k === 0) {
-        spectrum.push({ real: this.magnitude[0] * scale, imag: 0 });
+        spectrum.push({ real: mag[0] * scale, imag: 0 });
       } else if (k < halfN) {
-        const mag = this.magnitude[k] * scale;
+        const magnitude = mag[k] * scale;
         const ph = this.phase[k];
         spectrum.push({
-          real: mag * Math.cos(ph),
-          imag: mag * Math.sin(ph),
+          real: magnitude * Math.cos(ph),
+          imag: magnitude * Math.sin(ph),
         });
       } else if (k === halfN && this.N % 2 === 0) {
         spectrum.push({ real: 0, imag: 0 });
       } else {
         const mirrorK = this.N - k;
-        const mag = this.magnitude[mirrorK] * scale;
+        const magnitude = mag[mirrorK] * scale;
         const ph = -this.phase[mirrorK];
         spectrum.push({
-          real: mag * Math.cos(ph),
-          imag: mag * Math.sin(ph),
+          real: magnitude * Math.cos(ph),
+          imag: magnitude * Math.sin(ph),
         });
       }
     }
@@ -476,8 +884,20 @@ export class SpectrumEditor {
     return spectrum;
   }
 
+  private getEffectiveMagnitude(): number[] {
+    if (this.envelopeEditMode && this.fineStructure.length === this.magnitude.length) {
+      const result: number[] = [];
+      for (let i = 0; i < this.magnitude.length; i++) {
+        result.push(Math.max(0, this.envelopeCurve[i] * this.fineStructure[i]));
+      }
+      return result;
+    }
+    return this.magnitude;
+  }
+
   private doIDFT(): void {
-    const spectrum = this.buildFullSpectrum();
+    const effectiveMag = this.getEffectiveMagnitude();
+    const spectrum = this.buildFullSpectrum(effectiveMag);
     this.timeSignal = idft(spectrum);
     this.verifyMagnitude = null;
     this.verifyPhase = null;
@@ -560,6 +980,7 @@ export class SpectrumEditor {
     this.phase = newPhase;
     this.verifyMagnitude = null;
     this.verifyPhase = null;
+    this.resetEnvelopeState();
     this.render();
   }
 
@@ -675,6 +1096,7 @@ export class SpectrumEditor {
     this.timeSignal = [...srcSignal];
     this.verifyMagnitude = null;
     this.verifyPhase = null;
+    this.resetEnvelopeState();
     this.render();
   }
 
@@ -710,12 +1132,102 @@ export class SpectrumEditor {
       const barHeight = Math.max(1, this.magnitude[i] * yScale);
       const y = h - this.PADDING - barHeight;
 
-      this.magCtx.fillStyle = this.editTarget === 'magnitude' ? '#4fc3f7' : 'rgba(79, 195, 247, 0.5)';
+      this.magCtx.fillStyle = this.editTarget === 'magnitude' && !this.envelopeEditMode
+        ? '#4fc3f7'
+        : 'rgba(79, 195, 247, 0.5)';
       this.magCtx.fillRect(x, y, barWidth, barHeight);
     }
 
+    if (this.envelopeCurve.length === halfN && (this.envelopeExtracted || this.envelopeEditMode)) {
+      this.magCtx.strokeStyle = '#ff9800';
+      this.magCtx.lineWidth = 2.5;
+      this.magCtx.setLineDash([8, 5]);
+      this.magCtx.beginPath();
+      for (let i = 0; i < halfN; i++) {
+        const x = this.PADDING + (i + 0.5) / halfN * plotWidth;
+        const y = h - this.PADDING - Math.max(0, this.envelopeCurve[i]) * yScale;
+        if (i === 0) this.magCtx.moveTo(x, y);
+        else this.magCtx.lineTo(x, y);
+      }
+      this.magCtx.stroke();
+      this.magCtx.setLineDash([]);
+    }
+
+    if (this.envelopeEditMode && this.controlPoints.length > 0) {
+      for (let i = 0; i < this.controlPoints.length; i++) {
+        const cp = this.controlPoints[i];
+        const cx = this.getXFromBin(cp.binIndex + 0.5, w, halfN);
+        const cy = this.getYFromMagnitude(Math.max(0, cp.value), h, yRange);
+
+        this.magCtx.beginPath();
+        this.magCtx.arc(cx, cy, this.CONTROL_POINT_RADIUS, 0, Math.PI * 2);
+        this.magCtx.fillStyle = i === this.draggingControlPoint ? '#ff5722' : '#ff9800';
+        this.magCtx.fill();
+        this.magCtx.strokeStyle = '#ffffff';
+        this.magCtx.lineWidth = 2;
+        this.magCtx.stroke();
+
+        this.magCtx.fillStyle = '#ffffff';
+        this.magCtx.font = 'bold 10px -apple-system, BlinkMacSystemFont, sans-serif';
+        this.magCtx.textAlign = 'center';
+        this.magCtx.fillText(String(i + 1), cx, cy + 3);
+      }
+    }
+
+    if (this.envelopeEditMode && this.formants.length > 0) {
+      this.magCtx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+
+      for (let i = 0; i < this.formants.length; i++) {
+        const f = this.formants[i];
+        const fx = this.getXFromBin(f.bin + 0.5, w, halfN);
+        const fy = this.getYFromMagnitude(Math.max(0, f.value), h, yRange);
+
+        this.magCtx.strokeStyle = '#ef5350';
+        this.magCtx.lineWidth = 2;
+        this.magCtx.setLineDash([4, 3]);
+        this.magCtx.beginPath();
+        this.magCtx.moveTo(fx, h - this.PADDING);
+        this.magCtx.lineTo(fx, fy - 10);
+        this.magCtx.stroke();
+        this.magCtx.setLineDash([]);
+
+        const label = `F${i + 1}=${Math.round(f.freq)}Hz`;
+        const labelW = Math.max(60, this.magCtx.measureText(label).width + 12);
+        const labelH = 20;
+        let labelX = fx - labelW / 2;
+        let labelY = fy - labelH - 18;
+
+        if (labelX < this.PADDING + 2) labelX = this.PADDING + 2;
+        if (labelX + labelW > w - this.PADDING - 2) labelX = w - this.PADDING - 2 - labelW;
+        if (labelY < this.PADDING + 2) {
+          labelY = fy + 18;
+        }
+
+        this.magCtx.fillStyle = 'rgba(30, 20, 20, 0.95)';
+        this.roundRectPath(labelX, labelY, labelW, labelH, 4);
+        this.magCtx.fill();
+        this.magCtx.strokeStyle = '#ef5350';
+        this.magCtx.lineWidth = 1.5;
+        this.roundRectPath(labelX, labelY, labelW, labelH, 4);
+        this.magCtx.stroke();
+
+        this.magCtx.fillStyle = '#ef5350';
+        this.magCtx.textAlign = 'center';
+        this.magCtx.textBaseline = 'middle';
+        this.magCtx.fillText(label, labelX + labelW / 2, labelY + labelH / 2);
+
+        this.magCtx.beginPath();
+        this.magCtx.arc(fx, fy, 5, 0, Math.PI * 2);
+        this.magCtx.fillStyle = '#ef5350';
+        this.magCtx.fill();
+        this.magCtx.strokeStyle = '#ffffff';
+        this.magCtx.lineWidth = 2;
+        this.magCtx.stroke();
+      }
+    }
+
     if (this.verifyMagnitude) {
-      this.magCtx.strokeStyle = '#ffa726';
+      this.magCtx.strokeStyle = '#66bb6a';
       this.magCtx.lineWidth = 2;
       this.magCtx.setLineDash([6, 4]);
       this.magCtx.beginPath();
@@ -729,23 +1241,38 @@ export class SpectrumEditor {
       this.magCtx.setLineDash([]);
 
       let hasDiff = false;
+      const effectiveMag = this.getEffectiveMagnitude();
       for (let i = 0; i < halfN; i++) {
-        if (Math.abs(this.magnitude[i] - this.verifyMagnitude[i]) > 0.01) {
+        if (Math.abs(effectiveMag[i] - this.verifyMagnitude[i]) > 0.01) {
           hasDiff = true;
           break;
         }
       }
       if (hasDiff) {
         for (let i = 0; i < halfN; i++) {
-          const diff = Math.abs(this.magnitude[i] - this.verifyMagnitude[i]);
+          const diff = Math.abs(effectiveMag[i] - this.verifyMagnitude[i]);
           if (diff > 0.01) {
             const x = this.PADDING + (i / halfN) * plotWidth + ((plotWidth / halfN) - barWidth) / 2;
-            this.magCtx.fillStyle = 'rgba(239, 83, 80, 0.5)';
+            this.magCtx.fillStyle = 'rgba(239, 83, 80, 0.3)';
             this.magCtx.fillRect(x, h - this.PADDING - plotHeight, barWidth, plotHeight);
           }
         }
       }
     }
+  }
+
+  private roundRectPath(x: number, y: number, w: number, h: number, r: number): void {
+    this.magCtx.beginPath();
+    this.magCtx.moveTo(x + r, y);
+    this.magCtx.lineTo(x + w - r, y);
+    this.magCtx.quadraticCurveTo(x + w, y, x + w, y + r);
+    this.magCtx.lineTo(x + w, y + h - r);
+    this.magCtx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    this.magCtx.lineTo(x + r, y + h);
+    this.magCtx.quadraticCurveTo(x, y + h, x, y + h - r);
+    this.magCtx.lineTo(x, y + r);
+    this.magCtx.quadraticCurveTo(x, y, x + r, y);
+    this.magCtx.closePath();
   }
 
   private renderPhase(): void {
@@ -777,7 +1304,7 @@ export class SpectrumEditor {
     }
 
     if (this.verifyPhase) {
-      this.phaseCtx.strokeStyle = '#ffa726';
+      this.phaseCtx.strokeStyle = '#66bb6a';
       this.phaseCtx.lineWidth = 2;
       this.phaseCtx.setLineDash([6, 4]);
       this.phaseCtx.beginPath();
@@ -815,7 +1342,10 @@ export class SpectrumEditor {
 
     const legendItems: { label: string; color: string }[] = [];
     if (this.timeSignal.length > 0) legendItems.push({ label: 'IDFT时域信号', color: '#66bb6a' });
-    if (this.verifyMagnitude) legendItems.push({ label: '正变换验证(虚线)', color: '#ffa726' });
+    if (this.verifyMagnitude) legendItems.push({ label: '正变换验证(虚线)', color: '#66bb6a' });
+    if (this.envelopeExtracted) legendItems.push({ label: '频谱包络(橙色虚线)', color: '#ff9800' });
+    if (this.envelopeEditMode) legendItems.push({ label: '包络控制点', color: '#ff9800' });
+    if (this.envelopeEditMode && this.formants.length > 0) legendItems.push({ label: `共振峰(F1-F${this.formants.length})`, color: '#ef5350' });
     if (this.verifyMagnitude) legendItems.push({ label: '差异区域', color: 'rgba(239, 83, 80, 0.5)' });
 
     const legendEl = document.getElementById('se-verify-legend') as HTMLElement;
@@ -825,7 +1355,7 @@ export class SpectrumEditor {
       legendEl.style.marginTop = '1rem';
       legendEl.style.flexWrap = 'wrap';
       legendEl.innerHTML = legendItems.map(item =>
-        `<span class="legend-item"><span class="legend-color" style="background:${item.color};width:20px;height:4px;border-radius:2px;"></span> ${item.label}</span>`
+        `<span class="legend-item"><span class="legend-color" style="background:${item.color};width:20px;height:${item.label.includes('控制点') ? '12px' : '4px'};border-radius:${item.label.includes('控制点') ? '50%' : '2px'};"></span> ${item.label}</span>`
       ).join('');
     } else {
       legendEl.innerHTML = '';

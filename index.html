@@ -403,6 +403,26 @@
               </div>
             </div>
 
+            <div class="se-section">
+              <h3>频谱包络编辑</h3>
+              <div class="envelope-status" id="se-envelope-status">⚪ 未提取包络</div>
+              <div class="control-group">
+                <label>Lifter阶数: <span id="se-lifter-value">32</span> (范围 1 ~ N/4)</label>
+                <input type="range" id="se-lifter" min="1" max="64" step="1" value="32">
+              </div>
+              <div class="mode-buttons">
+                <button class="btn btn-primary" id="se-extract-envelope">📈 提取包络</button>
+              </div>
+              <div class="op-buttons" style="margin-top: 0.5rem;">
+                <button class="btn btn-preset" id="se-apply-envelope" disabled>✅ 应用包络</button>
+                <button class="btn btn-secondary" id="se-exit-envelope" disabled>退出编辑</button>
+                <button class="btn btn-secondary" id="se-undo" disabled>↶ 撤销</button>
+              </div>
+              <p class="hint" style="margin-top: 0.5rem;">
+                提取包络后可拖拽橙色控制点编辑形状，红色竖线标注共振峰位置。Ctrl+Z 撤销最近5步操作。
+              </p>
+            </div>
+
             <div class="signal-actions">
               <button id="se-idft" class="btn btn-primary">逆变换</button>
               <button id="se-verify" class="btn btn-secondary">正变换验证</button>

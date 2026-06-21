@@ -801,8 +801,62 @@ canvas {
   cursor: crosshair;
 }
 
+#se-magnitude-canvas.envelope-edit-mode {
+  cursor: pointer;
+}
+
 .se-legend {
   display: flex;
+}
+
+.envelope-status {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-align: center;
+  font-weight: 500;
+}
+
+.envelope-edit-hint {
+  padding: 0.75rem;
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 6px;
+  color: #ffb74d;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.formant-info {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(239, 83, 80, 0.1);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  border-radius: 6px;
+}
+
+.formant-info h4 {
+  color: #ef5350;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.formant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.formant-tag {
+  padding: 0.25rem 0.5rem;
+  background: rgba(239, 83, 80, 0.2);
+  border: 1px solid rgba(239, 83, 80, 0.4);
+  border-radius: 4px;
+  color: #ef5350;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 @media (max-width: 1200px) {

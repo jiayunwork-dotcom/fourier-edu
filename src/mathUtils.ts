@@ -549,3 +549,74 @@ export function linspace(start: number, end: number, n: number): number[] {
   }
   return result;
 }
+
+export function cubicSplineInterpolation(
+  xControl: number[],
+  yControl: number[],
+  xQuery: number[]
+): number[] {
+  const n = xControl.length;
+  if (n < 2) return xQuery.map(() => yControl[0] || 0);
+  if (n === 2) {
+    return xQuery.map((xq) => {
+      if (xq <= xControl[0]) return yControl[0];
+      if (xq >= xControl[1]) return yControl[1];
+      const t = (xq - xControl[0]) / (xControl[1] - xControl[0]);
+      return yControl[0] * (1 - t) + yControl[1] * t;
+    });
+  }
+
+  const h: number[] = [];
+  const alpha: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    h.push(xControl[i + 1] - xControl[i]);
+  }
+  for (let i = 1; i < n - 1; i++) {
+    alpha.push(
+      (3 / h[i]) * (yControl[i + 1] - yControl[i]) -
+        (3 / h[i - 1]) * (yControl[i] - yControl[i - 1])
+    );
+  }
+
+  const l: number[] = new Array(n).fill(1);
+  const mu: number[] = new Array(n).fill(0);
+  const z: number[] = new Array(n).fill(0);
+  const c: number[] = new Array(n).fill(0);
+  const b: number[] = new Array(n).fill(0);
+  const d: number[] = new Array(n).fill(0);
+
+  for (let i = 1; i < n - 1; i++) {
+    l[i] = 2 * (xControl[i + 1] - xControl[i - 1]) - h[i - 1] * mu[i - 1];
+    mu[i] = h[i] / l[i];
+    z[i] = (alpha[i - 1] - h[i - 1] * z[i - 1]) / l[i];
+  }
+
+  for (let j = n - 2; j >= 0; j--) {
+    c[j] = z[j] - mu[j] * c[j + 1];
+    b[j] =
+      (yControl[j + 1] - yControl[j]) / h[j] -
+      (h[j] * (c[j + 1] + 2 * c[j])) / 3;
+    d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
+  }
+
+  return xQuery.map((xq) => {
+    if (xq <= xControl[0]) return yControl[0];
+    if (xq >= xControl[n - 1]) return yControl[n - 1];
+
+    let idx = 0;
+    for (let i = 0; i < n - 1; i++) {
+      if (xq >= xControl[i] && xq <= xControl[i + 1]) {
+        idx = i;
+        break;
+      }
+    }
+
+    const dx = xq - xControl[idx];
+    return (
+      yControl[idx] +
+      b[idx] * dx +
+      c[idx] * dx * dx +
+      d[idx] * dx * dx * dx
+    );
+  });
+}
