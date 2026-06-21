@@ -448,22 +448,23 @@ export class SpectrumEditor {
   private buildFullSpectrum(): Complex[] {
     const spectrum: Complex[] = [];
     const halfN = this.magnitude.length;
+    const scale = this.N / 2;
 
     for (let k = 0; k < this.N; k++) {
       if (k === 0) {
-        spectrum.push({ real: this.magnitude[0] * this.N / 2, imag: 0 });
+        spectrum.push({ real: this.magnitude[0] * scale, imag: 0 });
       } else if (k < halfN) {
-        const mag = this.magnitude[k] * this.N / 2;
+        const mag = this.magnitude[k] * scale;
         const ph = this.phase[k];
         spectrum.push({
           real: mag * Math.cos(ph),
           imag: mag * Math.sin(ph),
         });
       } else if (k === halfN && this.N % 2 === 0) {
-        spectrum.push({ real: this.magnitude[0] * this.N / 2, imag: 0 });
+        spectrum.push({ real: 0, imag: 0 });
       } else {
         const mirrorK = this.N - k;
-        const mag = this.magnitude[mirrorK] * this.N / 2;
+        const mag = this.magnitude[mirrorK] * scale;
         const ph = -this.phase[mirrorK];
         spectrum.push({
           real: mag * Math.cos(ph),
@@ -522,20 +523,30 @@ export class SpectrumEditor {
     const newPhase: number[] = [];
 
     for (let i = 0; i < targetHalfN; i++) {
+      const reA = magA[i] * Math.cos(phaseA[i]);
+      const imA = magA[i] * Math.sin(phaseA[i]);
+      const reB = magB[i] * Math.cos(phaseB[i]);
+      const imB = magB[i] * Math.sin(phaseB[i]);
+
+      let re: number, im: number;
+
       switch (op) {
         case 'add':
-          newMag.push(magA[i] + magB[i]);
-          newPhase.push((phaseA[i] + phaseB[i]) / 2);
+          re = reA + reB;
+          im = imA + imB;
           break;
         case 'mul':
-          newMag.push(magA[i] * magB[i]);
-          newPhase.push(phaseA[i] + phaseB[i]);
+          re = reA * reB - imA * imB;
+          im = reA * imB + imA * reB;
           break;
         case 'sub':
-          newMag.push(Math.max(0, magA[i] - magB[i]));
-          newPhase.push(phaseA[i]);
+          re = reA - reB;
+          im = imA - imB;
           break;
       }
+
+      newMag.push(Math.max(0, Math.sqrt(re * re + im * im)));
+      newPhase.push(Math.atan2(im, re));
     }
 
     if (targetN !== this.N) {
